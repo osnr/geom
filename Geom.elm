@@ -4,12 +4,6 @@ import Touch as T
 type Finger = T.Touch
 type Pencil = T.Touch
 
-fingers : Signal [Finger]
-fingers = T.touches
-
-pencils : Signal [Pencil]
-pencils = T.touches
-
 type DrawState = { lines : [Line]
                  , arcs : [Arc]
                  , toolCenter : (Float, Float)
@@ -30,8 +24,8 @@ initialDrawState = { lines = []
                    , toolLength = 10
                    , drawing = NotDrawing }
 
-draw : ([T.Touch], [T.Touch]) -> DrawState -> DrawState
-draw (fingers, pencils) ds = ds
+draw : ([Finger], [Pencil]) -> DrawState -> DrawState
+draw (fs, ps) ds = ds
 
 toolTop : Float -> Form
 toolTop len = rect (len*5) 20 |> outlined defaultLine
@@ -53,7 +47,7 @@ display { lines, arcs, toolCenter, toolAngle, toolLength, drawing } =
                , displayTool toolCenter toolAngle toolLength  ]
 
 displayS : Signal Element
-displayS = display <~ (foldp draw initialDrawState <| lift2 (,) fingers pencils)
+displayS = display <~ (foldp draw initialDrawState <| fingersPencils)
 
 recenter : Int -> Int -> T.Touch -> T.Touch
 recenter ww wh t = { t | x <- t.x - (ww `div` 2),
@@ -61,32 +55,44 @@ recenter ww wh t = { t | x <- t.x - (ww `div` 2),
 
 distinguish : [T.Touch] -> ([Finger], [Pencil])
 distinguish ts = let examineTouch t (fs, ps) =
-                       let distances = map (\t2 -> ((t2.x - t.x)^2 + (t2.y - t.y)^2, t2)) ts
+                       let findDistance t1 t2 = (sqrt <| (t2.x - t.x)^2 + (t2.y - t.y)^2, t2)
+                           distances = map (findDistance t) <| filter (\t2 -> t /= t2) ts
                            nearer (d1, t1) (d2, t2) = if d1 < d2
                                                         then (d1, t1)
                                                         else (d2, t2)
-                           (nearestDist, nearestTouch) = foldr1 nearer distances
-                       in if nearestDist < 40
-                            then (nearestTouch :: fs, ps)
-                            else (fs, t :: ps)
+                       in if isEmpty distances
+                            then (fs, t :: ps)
+                            else let (nearestDist, nearestTouch) = foldr1 nearer distances
+                                 in if nearestDist < 40
+                                      then (nearestTouch :: fs, ps)
+                                      else (fs, t :: ps)
                  in foldr examineTouch ([], []) ts
 
 touchesR : Signal [T.Touch]
 touchesR = let recenterAll ww wh ts = map (recenter ww wh) ts
            in recenterAll <~ Window.width ~ Window.height ~ T.touches
 
-touchSymbol : T.Touch -> Form
-touchSymbol {x, y} = circle 10
-                   |> outlined defaultLine
-                   |> move (toFloat x, toFloat y)
+fingersPencils : Signal ([Finger], [Pencil])
+fingersPencils = distinguish <~ touchesR
+
+fingerSymbol : Finger -> Form
+fingerSymbol {x, y} = circle 10
+                    |> filled green
+                    |> move (toFloat x, toFloat y)
+
+pencilSymbol : Finger -> Form
+pencilSymbol {x, y} = rect 10 10
+                    |> filled black
+                    |> move (toFloat x, toFloat y)
 
 touchesView : Signal Element
-touchesView = let viewTouches ww wh ts = collage ww wh <| map touchSymbol ts
+touchesView = let viewTouches ww wh (fs, ps) = collage ww wh
+                                               <| map fingerSymbol fs ++ map pencilSymbol ps
               in viewTouches <~ Window.width 
                               ~ Window.height
-                              ~ touchesR
+                              ~ fingersPencils
 
-main = (\x y -> layers [x, y]) <~ touchesView ~ displayS
+main = (\x y z -> layers [x, y, z]) <~ touchesView ~ displayS ~ lift asText fingersPencils
 
 -- TODO put dots for fingers and/or pencils
 -- start working on rotation, drawing, etc
