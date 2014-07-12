@@ -54,19 +54,24 @@ recenter ww wh t = { t | x <- t.x - (ww `div` 2),
                          y <- -t.y + (wh `div` 2) }
 
 distinguish : [T.Touch] -> ([Finger], [Pencil])
-distinguish ts = let examineTouch t (fs, ps) =
+distinguish ts = let examineTouch t (fs, ps, used) =
                        let findDistance t1 t2 = (sqrt <| (t2.x - t.x)^2 + (t2.y - t.y)^2, t2)
                            distances = map (findDistance t) <| filter (\t2 -> t /= t2) ts
                            nearer (d1, t1) (d2, t2) = if d1 < d2
                                                         then (d1, t1)
                                                         else (d2, t2)
-                       in if isEmpty distances
-                            then (fs, t :: ps)
-                            else let (nearestDist, nearestTouch) = foldr1 nearer distances
-                                 in if nearestDist < 100
-                                      then (nearestTouch :: fs, ps)
-                                      else (fs, t :: ps)
-                 in foldr examineTouch ([], []) ts
+                       in if | isEmpty distances -> (fs, t :: ps, used)
+                             | any (\t2 -> t == t2) used -> (fs, ps, used)
+                             | otherwise ->
+                               let (nearestDist, nearestTouch) = foldr1 nearer distances
+                               in if nearestDist < 80
+                                    then ({ t | x <- (nearestTouch.x + t.x) `div` 2,
+                                                y <- (nearestTouch.y + t.y) `div` 2  } :: fs,
+                                          ps,
+                                          t :: nearestTouch :: used)
+                                    else (fs, t :: ps, used)
+                     (fs, ps, _) = foldr examineTouch ([], [], []) ts
+                 in (fs, ps)
 
 touchesR : Signal [T.Touch]
 touchesR = let recenterAll ww wh ts = map (recenter ww wh) ts
