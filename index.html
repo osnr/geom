@@ -1,0 +1,17 @@
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <script>
+            document.body.addEventListener('touchmove', function(event) {
+                event.preventDefault();
+            }, false);
+        </script>
+        <script src="elm-runtime.js"></script>
+        <script src="Geom.js"></script>
+    </head>
+    <body>
+        <script>
+            Elm.fullscreen(Elm.Main);
+        </script>
+    </body>
+</html>

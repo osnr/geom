@@ -43,7 +43,7 @@ displayTool c angle len = group [ toolTop len |> moveY 11
 
 display : DrawState -> Element
 display { lines, arcs, toolCenter, toolAngle, toolLength, drawing } =
-        layers [ collage 800 600 <| map (traced defaultLine . uncurry segment) lines
+        layers [ collage 400 300 <| map (traced defaultLine . uncurry segment) lines
                , displayTool toolCenter toolAngle toolLength  ]
 
 displayS : Signal Element
@@ -63,7 +63,7 @@ distinguish ts = let examineTouch t (fs, ps) =
                        in if isEmpty distances
                             then (fs, t :: ps)
                             else let (nearestDist, nearestTouch) = foldr1 nearer distances
-                                 in if nearestDist < 40
+                                 in if nearestDist < 100
                                       then (nearestTouch :: fs, ps)
                                       else (fs, t :: ps)
                  in foldr examineTouch ([], []) ts
@@ -76,12 +76,12 @@ fingersPencils : Signal ([Finger], [Pencil])
 fingersPencils = distinguish <~ touchesR
 
 fingerSymbol : Finger -> Form
-fingerSymbol {x, y} = circle 10
+fingerSymbol {x, y} = circle 50
                     |> filled green
                     |> move (toFloat x, toFloat y)
 
 pencilSymbol : Finger -> Form
-pencilSymbol {x, y} = rect 10 10
+pencilSymbol {x, y} = rect 50 50
                     |> filled black
                     |> move (toFloat x, toFloat y)
 
