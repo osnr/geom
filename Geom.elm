@@ -1,4 +1,5 @@
 import Window
+import Text
 import Touch as T
 
 type Finger = T.Touch
@@ -6,48 +7,109 @@ type Pencil = T.Touch
 
 type DrawState = { lines : [Line]
                  , arcs : [Arc]
-                 , toolCenter : (Float, Float)
-                 , toolAngle : Float
-                 , toolLength : Float
+                 , toolCenter : Point
+                 , toolAngle : Angle
+                 , toolLength : Length
+                 , toolMoving : ToolMoving
                  , drawing : Drawing }
 
-type Line = ((Float, Float), (Float, Float))
-type Arc = ((Float, Float), Float)
+type Point = (Float, Float)
+type Angle = Float
+type Length = Float
+
+type Line = (Point, Point)
+type Arc = (Point, Length, Angle)
 
 data Drawing = NotDrawing | DrawingLine Line | DrawingArc Arc
 
+data ToolMoving = NotMoving
+                | Translating { initialOffset : Point }
+                | Stretching { initialLength : Length }
+
+-- updating state
 initialDrawState : DrawState
 initialDrawState = { lines = []
                    , arcs = []
                    , toolCenter = (0, 0)
                    , toolAngle = 0
                    , toolLength = 10
+                   , toolMoving = NotMoving
                    , drawing = NotDrawing }
 
-draw : ([Finger], [Pencil]) -> DrawState -> DrawState
-draw (fs, ps) ds =
+toPoint : (Int, Int) -> Point
+toPoint (x, y) = (toFloat x, toFloat y)
+
+addv : Point -> Point -> Point
+addv (x1, y1) (x2, y2) = (x1 + x2, y1 + y2)
+
+subv : Point -> Point -> Point
+subv (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
+
+dist : Point -> Point -> Float
+dist (x1, y1) (x2, y2) = sqrt <| (x1 - x2)^2 + (y1 - y2)^2
+
+moveTool : [Finger] -> DrawState -> DrawState
+moveTool fs ds =
+  case (fs, ds.toolMoving) of
+    ([], _) -> { ds | toolMoving <- NotMoving }
+
+    (f::[], NotMoving) ->
+      { ds | toolMoving <- Translating { initialOffset = ds.toolCenter `subv` toPoint (f.x, f.y) } }
+    (f::[], Translating {initialOffset}) ->
+      { ds | toolCenter <- initialOffset `addv` toPoint (f.x, f.y) }
+    (f::[], Stretching _) -> { ds | toolMoving <- NotMoving }
+
+    (f1::f2::[], NotMoving) ->
+      { ds | toolMoving <- Stretching { initialLength = ds.toolLength - (toPoint (f1.x, f1.y) `dist` toPoint (f2.x, f2.y)) } }
+    (f1::f2::[], Stretching {initialLength}) ->
+      { ds | toolLength <- initialLength + (toPoint (f1.x, f1.y) `dist` toPoint (f2.x, f2.y)) }
+
+draw : [Pencil] -> DrawState -> DrawState
+draw ps ds =
   case (ps, ds.drawing) of
     ([], NotDrawing) -> ds
     ([], DrawingLine l) -> { ds | drawing <- NotDrawing,
                                   lines <- l :: ds.lines }
     ([], DrawingArc a) -> { ds | drawing <- NotDrawing,
                                  arcs <- a :: ds.arcs }
-    (p::_, NotDrawing) -> { ds | drawing <- DrawingLine ((toFloat p.x, toFloat p.y), (toFloat p.x, toFloat p.y)) }
+    (p::_, NotDrawing) -> { ds | drawing <- DrawingLine (toPoint (p.x, p.y), toPoint (p.x, p.y)) }
     (p::_, DrawingLine (pt1, _)) -> { ds | drawing <- DrawingLine (pt1, (toFloat p.x, toFloat p.y)) }
 
-toolTop : Float -> Form
-toolTop len = rect (len*5) 20 |> outlined defaultLine
+update : ([Finger], [Pencil]) -> DrawState -> DrawState
+update (fs, ps) = draw ps . moveTool fs
 
-toolBottom : Float -> Form
-toolBottom len = rect (len*5) 20 |> outlined defaultLine
+-- display
+unitWidth = 20
+markHeight = 20
 
-displayTool : (Float, Float) -> Float -> Float -> Element
+toolTop : Length -> Form
+toolTop len = rect (len*unitWidth) 20
+              |> filled (rgba 0 128 128 0.5)
+              |> moveX (len*unitWidth/2)
+
+toolMarks : Length -> Form
+toolMarks len =
+    let mark val = group [ segment (0, 0) (0, markHeight)
+                           |> traced (solid (rgb 0 64 128))
+                         , toText (show val)
+                           |> Text.height 10
+                           |> Text.color (rgb 0 64 128)
+                           |> Text.centered |> toForm
+                           |> moveY -6 ]
+                 |> moveX (val*unitWidth)
+    in group <| map (mark . toFloat) [0..floor len]
+
+toolBottom : Length -> Form
+toolBottom len = rect (len*unitWidth) 20
+               |> filled (rgba 0 128 128 0.5)
+               |> moveX (len*unitWidth/2)
+               |> \back -> group [back, toolMarks len]
+
+displayTool : Point -> Angle -> Length -> Form
 displayTool c angle len = group [ toolTop len |> moveY 11
                                 , toolBottom len |> moveY -10 ]
                         |> move c
                         |> rotate angle
-                        |> (\x -> [x])
-                        |> collage 800 600
 
 drawingLines : Drawing -> [Line]
 drawingLines drawing = case drawing of
@@ -57,12 +119,32 @@ drawingLines drawing = case drawing of
 
 display : Int -> Int -> DrawState -> Element
 display ww wh { lines, arcs, toolCenter, toolAngle, toolLength, drawing } =
-        layers [ collage ww wh <| map (traced defaultLine . uncurry segment) <| drawingLines drawing ++ lines
-               , displayTool toolCenter toolAngle toolLength  ]
+        let linesForms = map (traced defaultLine . uncurry segment) <| drawingLines drawing ++ lines
+        in collage ww wh <| linesForms ++ [displayTool toolCenter toolAngle toolLength]
 
+-- problem display
+problem : Form
+problem = let triangle = group
+                         <| map (outlined (solid darkGray))
+                         <| [ segment (0, 0) (100, 0)
+                            , segment (100, 0) (0, 115)
+                            , segment (0, 115) (0, 0) ]
+              labels = group
+                       <| [ move (0, -10) <| toForm <| plainText "A"
+                          , move (110, 0) <| toForm <| plainText "B"
+                          , move (0, 125) <| toForm <| plainText "C" ]
+          in moveY 100
+             <| group [triangle, labels]
+
+displayProblem : Int -> Int -> Element
+displayProblem ww wh = collage ww wh [problem]
+
+-- overall display
 displayS : Signal Element
-displayS = display <~ Window.width ~ Window.height ~ (foldp draw initialDrawState <| fingersPencils)
+displayS = (\ww wh ds -> layers [displayProblem ww wh, display ww wh ds])
+           <~ Window.width ~ Window.height ~ (foldp update initialDrawState <| fingersPencils)
 
+-- touch analysis
 recenter : Int -> Int -> T.Touch -> T.Touch
 recenter ww wh t = { t | x <- t.x - (ww `div` 2),
                          y <- -t.y + (wh `div` 2) }
@@ -106,8 +188,7 @@ pencilSymbol {x, y} = rect 50 50
                     |> move (toFloat x, toFloat y)
 
 touchesView : Signal Element
-touchesView = let viewTouches ww wh (fs, ps) = color blue
-                                               <| collage ww wh
+touchesView = let viewTouches ww wh (fs, ps) = collage ww wh
                                                <| map fingerSymbol fs ++ map pencilSymbol ps
               in viewTouches <~ Window.width 
                               ~ Window.height
