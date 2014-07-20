@@ -1,5 +1,6 @@
 import Window
 import Text
+import Keyboard
 import Touch as T
 
 type Finger = T.Touch
@@ -149,8 +150,8 @@ recenter : Int -> Int -> T.Touch -> T.Touch
 recenter ww wh t = { t | x <- t.x - (ww `div` 2),
                          y <- -t.y + (wh `div` 2) }
 
-distinguish : [T.Touch] -> ([Finger], [Pencil])
-distinguish ts =
+distinguish : [T.Touch] -> Bool -> ([Finger], [Pencil])
+distinguish ts forceFinger =
   let examineTouch t (fs, ps, used) =
         let findDistance t1 t2 = (sqrt <| (t2.x - t.x)^2 + (t2.y - t.y)^2, t2)
             distances = map (findDistance t) <| filter (\t2 -> t /= t2) ts
@@ -161,7 +162,7 @@ distinguish ts =
               | any (\t2 -> t == t2) used -> (fs, ps, used)
               | otherwise ->
                 let (nearestDist, nearestTouch) = foldr1 nearer distances
-                in if nearestDist < 80
+                in if nearestDist < 120
                      then ({ t | x <- (nearestTouch.x + t.x) `div` 2,
                                  y <- (nearestTouch.y + t.y) `div` 2  } :: fs,
                            ps,
@@ -175,7 +176,7 @@ touchesR = let recenterAll ww wh ts = map (recenter ww wh) ts
            in recenterAll <~ Window.width ~ Window.height ~ T.touches
 
 fingersPencils : Signal ([Finger], [Pencil])
-fingersPencils = distinguish <~ touchesR
+fingersPencils = distinguish <~ touchesR ~ Keyboard.shift
 
 fingerSymbol : Finger -> Form
 fingerSymbol {x, y} = circle 50
