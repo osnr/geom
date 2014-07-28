@@ -11,8 +11,7 @@ type DrawState = { lines : [Line]
                  , toolCenter : Point
                  , toolAngle : Angle
                  , toolLength : Length
-                 , toolMoving : ToolMoving
-                 , drawing : Drawing }
+                 , gesture : Gesture }
 
 type Point = (Float, Float)
 type Angle = Float
@@ -21,11 +20,18 @@ type Length = Float
 type Line = (Point, Point)
 type Arc = (Point, Length, Angle)
 
-data Drawing = NotDrawing | DrawingLine Line | DrawingArc Arc
+data Gesture = NoTouches
 
-data ToolMoving = NotMoving
-                | Translating { initialOffset : Point }
-                | Stretching { initialLength : Length }
+             | OneFingerTranslate Point Finger
+
+             | TwoFingers Finger Finger
+
+             | AdjustLength Finger Finger
+             | Rotate Finger Finger
+
+             | OneFingerOnePencil Finger Pencil
+             | DrawLine Finger Pencil Line
+             | DrawArc Finger Pencil Arc
 
 -- updating state
 initialDrawState : DrawState
@@ -34,50 +40,72 @@ initialDrawState = { lines = []
                    , toolCenter = (0, 0)
                    , toolAngle = 0
                    , toolLength = 10
-                   , toolMoving = NotMoving
-                   , drawing = NotDrawing }
+                   , gesture = NoTouches }
 
 toPoint : (Int, Int) -> Point
 toPoint (x, y) = (toFloat x, toFloat y)
 
-addv : Point -> Point -> Point
+norm : Point -> Float
+norm (x, y) = x^2 + y^2
+
 addv (x1, y1) (x2, y2) = (x1 + x2, y1 + y2)
 
-subv : Point -> Point -> Point
-subv (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
+displacement : T.Touch -> Point
+displacement t = toPoint (t.x - t.x0, t.y - t.y0)
 
-dist : Point -> Point -> Float
-dist (x1, y1) (x2, y2) = sqrt <| (x1 - x2)^2 + (y1 - y2)^2
+-- f1 is the fixed finger (the one that went down first)
+-- f2 is the finger that's moving to do rotation or length adjustment
+startTwoFingerGesture : Finger -> Finger -> Gesture
+startTwoFingerGesture f1 f2 =
+  -- do some tan stuff to find the angle of the movement from f2's p0 to f2's p
+  -- then return AdjustLength or Rotate
+  let angle = atan2 (toFloat (f2.y - f2.y0)) (toFloat (f2.x - f2.x0))
+  in if (angle < degrees 45 && angle > degrees -45) || (angle > degrees 135 || angle < degrees -135)
+       then AdjustLength f1 f2 -- pulling left or right
+       else Rotate f1 f2
 
-moveTool : [Finger] -> DrawState -> DrawState
-moveTool fs ds =
-  case (fs, ds.toolMoving) of
-    ([], _) -> { ds | toolMoving <- NotMoving }
+stopGesture : DrawState -> DrawState
+stopGesture ds = { ds | gesture <- NoTouches }
 
-    (f::[], NotMoving) ->
-      { ds | toolMoving <- Translating { initialOffset = ds.toolCenter `subv` toPoint (f.x, f.y) } }
-    (f::[], Translating {initialOffset}) ->
-      { ds | toolCenter <- initialOffset `addv` toPoint (f.x, f.y) }
-    (f::[], Stretching _) -> { ds | toolMoving <- NotMoving }
+gesture : ([Finger], [Pencil]) -> DrawState -> DrawState
+gesture (fs, ps) ds =
+  case (ds.gesture, fs, ps) of
+    (NoTouches, f::[], []) -> { ds | gesture <- OneFingerTranslate ds.toolCenter f }
 
-    (f1::f2::[], NotMoving) ->
-      { ds | toolMoving <- Stretching { initialLength = ds.toolLength - (toPoint (f1.x, f1.y) `dist` toPoint (f2.x, f2.y)) } }
-    (f1::f2::[], Stretching {initialLength}) ->
-      { ds | toolLength <- initialLength + (toPoint (f1.x, f1.y) `dist` toPoint (f2.x, f2.y)) }
+    (OneFingerTranslate p0 f, f'::[], []) ->
+      if f'.id == f.id
+        then { ds | gesture <- OneFingerTranslate p0 f' }
+        else stopGesture ds
 
-draw : [Pencil] -> DrawState -> DrawState
-draw ps ds =
-  case (ps, ds.drawing) of
-    ([], NotDrawing) -> ds
-    ([], DrawingLine l) -> { ds | drawing <- NotDrawing,
-                                  lines <- l :: ds.lines }
-    ([], DrawingArc a) -> { ds | drawing <- NotDrawing,
-                                 arcs <- a :: ds.arcs }
-    (p::_, NotDrawing) -> { ds | drawing <- DrawingLine (toPoint (p.x, p.y), toPoint (p.x, p.y)) }
-    (p::_, DrawingLine (pt1, _)) -> { ds | drawing <- DrawingLine (pt1, (toFloat p.x, toFloat p.y)) }
+    (OneFingerTranslate _ f1, f2'::f1'::[], []) ->
+      if f1'.id == f1.id
+        then { ds | gesture <- TwoFingers f1' f2' }
+        else stopGesture ds
+
+    (TwoFingers f1 f2, f2'::f1'::[], []) ->
+      -- dispatch only if the distance f2 has moved is big enough
+      if f1'.id == f1.id && f2'.id == f2.id && norm (displacement f2') > 10
+        then { ds | gesture <- startTwoFingerGesture f1' f2' }
+        else stopGesture ds
+
+    (AdjustLength f1 f2, f2'::f1'::[], []) ->
+      if f1'.id == f1.id && f2'.id == f2.id
+        then { ds | gesture <- AdjustLength f1' f2' }
+        else stopGesture ds
+
+    (Rotate f1 f2, f2'::f1'::[], []) ->
+      if f1'.id == f1.id && f2'.id == f2.id
+        then { ds | gesture <- Rotate f1' f2' }
+        else stopGesture ds
+
+    (_, _, _) -> stopGesture ds
 
 update : ([Finger], [Pencil]) -> DrawState -> DrawState
-update (fs, ps) = draw ps . moveTool fs
+update fps ds =
+  let ds' = gesture fps ds
+  in case ds'.gesture of
+       OneFingerTranslate p0 f -> { ds' | toolCenter <- p0 `addv` displacement f }
+       otherwise -> ds'
 
 -- display
 unitWidth = 20
@@ -112,15 +140,9 @@ displayTool c angle len = group [ toolTop len |> moveY 11
                         |> move c
                         |> rotate angle
 
-drawingLines : Drawing -> [Line]
-drawingLines drawing = case drawing of
-                         NotDrawing -> []
-                         DrawingLine l -> [l]
-                         DrawingArc _ -> []
-
 display : Int -> Int -> DrawState -> Element
-display ww wh { lines, arcs, toolCenter, toolAngle, toolLength, drawing } =
-        let linesForms = map (traced defaultLine . uncurry segment) <| drawingLines drawing ++ lines
+display ww wh { lines, arcs, toolCenter, toolAngle, toolLength } =
+        let linesForms = map (traced defaultLine . uncurry segment) <| lines
         in collage ww wh <| linesForms ++ [displayTool toolCenter toolAngle toolLength]
 
 -- problem display
@@ -142,18 +164,20 @@ displayProblem ww wh = collage ww wh [problem]
 
 -- overall display
 displayS : Signal Element
-displayS = (\ww wh ds -> layers [displayProblem ww wh, display ww wh ds])
+displayS = (\ww wh ds -> layers [asText ds, displayProblem ww wh, display ww wh ds])
            <~ Window.width ~ Window.height ~ (foldp update initialDrawState <| fingersPencils)
 
 -- touch analysis
 recenter : Int -> Int -> T.Touch -> T.Touch
-recenter ww wh t = { t | x <- t.x - (ww `div` 2),
-                         y <- -t.y + (wh `div` 2) }
+recenter cx cy t = { t | x <- t.x - cx,
+                         y <- -t.y + cy,
+                         x0 <- t.x0 - cx,
+                         y0 <- t.y0 - cy }
 
 distinguish : [T.Touch] -> Bool -> ([Finger], [Pencil])
 distinguish ts forceFinger =
   let examineTouch t (fs, ps, used) =
-        let findDistance t1 t2 = (sqrt <| (t2.x - t.x)^2 + (t2.y - t.y)^2, t2)
+        let findDistance t1 t2 = (sqrt <| toFloat (t2.x - t.x)^2 + toFloat (t2.y - t.y)^2, t2)
             distances = map (findDistance t) <| filter (\t2 -> t /= t2) ts
             nearer (d1, t1) (d2, t2) = if d1 < d2
                                          then (d1, t1)
@@ -168,12 +192,17 @@ distinguish ts forceFinger =
                            ps,
                            t :: nearestTouch :: used)
                      else (fs, t :: ps, used)
-      (fs, ps, _) = foldr examineTouch ([], [], []) ts
+      (fs, ps, _) =
+        if forceFinger
+           then (ts, [], [])
+           else foldr examineTouch ([], [], []) ts
   in (fs, ps)
 
 touchesR : Signal [T.Touch]
-touchesR = let recenterAll ww wh ts = map (recenter ww wh) ts
-           in recenterAll <~ Window.width ~ Window.height ~ T.touches
+touchesR = let recenterAndResortAll ww wh ts =
+                 let (cx, cy) = (ww `div` 2, wh `div` 2)
+                 in map (recenter cx cy) <| sortBy ((\x -> -x) . .t0) ts
+           in recenterAndResortAll <~ Window.width ~ Window.height ~ T.touches
 
 fingersPencils : Signal ([Finger], [Pencil])
 fingersPencils = distinguish <~ touchesR ~ Keyboard.shift
@@ -195,7 +224,7 @@ touchesView = let viewTouches ww wh (fs, ps) = collage ww wh
                               ~ Window.height
                               ~ fingersPencils
 
-main = (\x y z -> layers [x, y, z]) <~ touchesView ~ displayS ~ lift asText fingersPencils
+main = (\x y z -> layers [x, y, plainText "\n\n" `above` z]) <~ touchesView ~ displayS ~ lift asText fingersPencils
 
 -- TODO put dots for fingers and/or pencils
 -- start working on rotation, drawing, etc
