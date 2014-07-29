@@ -184,7 +184,7 @@ update ts ds =
          let r = norm <| displacement t2
          in { ds' | drawing <- DrawingLine ((sx, sy), (sx + r*(cos ds.toolAngle), sy + r*(sin ds.toolAngle))) }
        DrawArc t1 t2 c r ->
-         { ds' | drawing <- DrawingArc (c, ds'.toolAngle, angularDist t2, r) }
+         { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle, angularDist t2) }
 
        otherwise ->
          case ds'.drawing of
@@ -197,6 +197,14 @@ update ts ds =
 -- display
 unitWidth = 20
 markHeight = 20
+
+{-| An elliptical arc with the given center, radii and angle interval. -}
+arc : (Float, Float) -> (Float, Float) -> (Float, Float) -> Shape
+arc (cx, cy) (a, b) (startAngle, endAngle) =
+  let n = 50
+      t = (endAngle - startAngle) / n
+      f i = (cx + a * cos (t*i + startAngle), cy + b * sin (t*i + startAngle))
+  in map f [0..n-1]
 
 toolTop : Length -> Form
 toolTop len = rect len 20
@@ -238,7 +246,12 @@ display ww wh { lines, arcs, toolStart, toolAngle, toolLength, drawing } =
                               NotDrawing -> lines
                               DrawingLine l -> l :: lines
                               DrawingArc _ -> lines
-        in collage ww wh <| linesForms ++ [displayTool toolStart toolAngle toolLength]
+            arcForms = map (\(c, l, a1, a2) -> traced defaultLine <| arc c (l, l) (a1, a2))
+                       <| case drawing of
+                            NotDrawing -> arcs
+                            DrawingLine _ -> arcs
+                            DrawingArc a -> a :: arcs
+        in collage ww wh <| linesForms ++ arcForms ++ [displayTool toolStart toolAngle toolLength]
 
 -- problem display
 problem : Form
