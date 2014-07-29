@@ -1,6 +1,7 @@
-import Window
+import Dict
 import Text
 import Keyboard
+import Window
 import Touch as T
 
 type NormalizedTouch = { x:Float, y:Float, id:Int, x0:Float, y0:Float, t0:Time }
@@ -40,7 +41,7 @@ initialDrawState = { lines = []
                    , arcs = []
                    , toolCenter = (0, 0)
                    , toolAngle = 0
-                   , toolLength = 200
+                   , toolLength = 300
                    , gesture = NoTouches }
 
 norm : Point -> Float
@@ -121,17 +122,21 @@ toolTop len = rect len 20
               |> filled (rgba 0 128 128 0.5)
               |> moveX (len/2)
 
+marks : Dict.Dict Int Form
+marks =
+  let mark n = group [ segment (0, 0) (0, markHeight)
+                       |> traced (solid (rgb 0 64 128))
+                     , toText (show n)
+                       |> Text.height 10
+                       |> Text.color (rgb 0 64 128)
+                       |> Text.centered |> toForm
+                       |> moveY -6 ]
+  in Dict.fromList <| map (\n -> (n, mark n)) [0..30]
+
 toolMarks : Length -> Form
 toolMarks len =
-    let mark val = group [ segment (0, 0) (0, markHeight)
-                           |> traced (solid (rgb 0 64 128))
-                         , toText (show val)
-                           |> Text.height 10
-                           |> Text.color (rgb 0 64 128)
-                           |> Text.centered |> toForm
-                           |> moveY -6 ]
-                 |> moveX (val*unitWidth)
-    in group <| map (mark . toFloat) [0..floor (len / unitWidth)]
+  let mark n = Dict.getOrElse (group []) n marks |> moveX (toFloat (n*unitWidth))
+  in group <| map mark [0..floor (len / unitWidth)]
 
 toolBottom : Length -> Form
 toolBottom len = rect len 20
@@ -169,8 +174,10 @@ displayProblem ww wh = collage ww wh [problem]
 
 -- overall display
 displayS : Signal Element
-displayS = (\ww wh ds -> layers [asText ds, displayProblem ww wh, display ww wh ds])
-           <~ Window.width ~ Window.height ~ (foldp update initialDrawState <| fingersPencils)
+displayS = (\ds ww wh -> layers [asText ds, displayProblem ww wh, display ww wh ds])
+           <~ (foldp update initialDrawState <| fingersPencils)
+            ~ Window.width
+            ~ Window.height
 
 -- touch analysis
 recenter : Int -> Int -> T.Touch -> NormalizedTouch
@@ -182,28 +189,29 @@ recenter cx cy t = { x = toFloat <| t.x - cx,
                      t0 = t.t0 }
 
 distinguish : [NormalizedTouch] -> Bool -> ([Finger], [Pencil])
-distinguish ts forceFinger = (ts, [])
-  -- let examineTouch t (fs, ps, used) =
-  --       let findDistance t1 t2 = (sqrt <| toFloat (t2.x - t.x)^2 + toFloat (t2.y - t.y)^2, t2)
-  --           distances = map (findDistance t) <| filter (\t2 -> t /= t2) ts
-  --           nearer (d1, t1) (d2, t2) = if d1 < d2
-  --                                        then (d1, t1)
-  --                                        else (d2, t2)
-  --       in if | isEmpty distances -> (fs, t :: ps, used)
-  --             | any (\t2 -> t == t2) used -> (fs, ps, used)
-  --             | otherwise ->
-  --               let (nearestDist, nearestTouch) = foldr1 nearer distances
-  --               in if nearestDist < 120
-  --                    then ({ t | x <- (nearestTouch.x + t.x) `div` 2,
-  --                                y <- (nearestTouch.y + t.y) `div` 2  } :: fs,
-  --                          ps,
-  --                          t :: nearestTouch :: used)
-  --                    else (fs, t :: ps, used)
-  --     (fs, ps, _) =
-  --       if forceFinger
-  --          then (ts, [], [])
-  --          else foldr examineTouch ([], [], []) ts
-  -- in (fs, ps)
+distinguish ts forceFinger =
+  let examineTouch t (fs, ps, used) =
+        let ts' = filter (\t2 -> t /= t2) ts
+            findDistance t1 t2 = sqrt <| (t2.x - t1.x)^2 + (t2.y - t1.y)^2
+            byDistance ts = sortBy (findDistance t) ts
+
+        in if | isEmpty ts' -> (fs, t :: ps, used)
+              | any (\uid -> t.id == uid) used -> (fs, ps, used)
+              | otherwise ->
+                let nearestTouch = head <| byDistance ts'
+                in if findDistance nearestTouch t < 230
+                     then ({ t | x <- (nearestTouch.x + t.x) / 2,
+                                 y <- (nearestTouch.y + t.y) / 2,
+                                 x0 <- (nearestTouch.x0 + t.x0) / 2,
+                                 y0 <- (nearestTouch.y0 + t.y0) / 2 } :: fs,
+                           ps,
+                           t.id :: nearestTouch.id :: used)
+                     else (fs, t :: ps, used)
+      (fs, ps, _) =
+        if forceFinger
+           then (ts, [], [])
+           else foldr examineTouch ([], [], []) ts
+  in (fs, ps)
 
 touchesR : Signal [NormalizedTouch]
 touchesR = let recenterAndResortAll ww wh ts =
@@ -227,7 +235,7 @@ pencilSymbol {x, y} = rect 50 50
 touchesView : Signal Element
 touchesView = let viewTouches ww wh (fs, ps) = collage ww wh
                                                <| map fingerSymbol fs ++ map pencilSymbol ps
-              in viewTouches <~ Window.width 
+              in viewTouches <~ Window.width
                               ~ Window.height
                               ~ fingersPencils
 
