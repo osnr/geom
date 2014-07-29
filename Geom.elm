@@ -63,7 +63,15 @@ toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
 
 insideRuler : DrawState -> NTouch -> Bool
-insideRuler ds t = norm (ds.toolStart `subv` (t.x, t.y)) < ds.toolLength / 2
+insideRuler ds {x, y} =
+  let (sx, sy) = ds.toolStart
+      (ex, ey) = (sx + ds.toolLength*(cos ds.toolAngle), sy + ds.toolLength*(sin ds.toolAngle))
+
+      dx = ex - sx
+      dy = ey - sy
+
+      dist = abs (dy*x - dx*y - sx*ey + ex*sy) / sqrt (dx^2 + dy^2)
+  in dist < 50
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to do rotation or length adjustment
@@ -97,13 +105,13 @@ gesture ts ds =
 
     (Translate _ t1, t2'::t1'::[]) ->
       if t1'.id == t1.id
-        then if insideRuler ds t2'
+        then if Debug.log "insideRuler" <| insideRuler ds t2'
                then OneFingerOnePencil t1' t2'
                else TwoFingers t1' t2'
         else NoTouches
     (OneFinger t1, t2'::t1'::[]) ->
       if t1'.id == t1.id
-        then if insideRuler ds t2'
+        then if Debug.log "insideRuler 2" <| insideRuler ds t2'
                then OneFingerOnePencil t1' t2'
                else TwoFingers t1' t2'
         else NoTouches
@@ -198,6 +206,9 @@ update ts ds =
 unitWidth = 20
 markHeight = 20
 
+rulerTopHeight = 20
+rulerBottomHeight = 20
+
 {-| An elliptical arc with the given center, radii and angle interval. -}
 arc : (Float, Float) -> (Float, Float) -> (Float, Float) -> Shape
 arc (cx, cy) (a, b) (startAngle, endAngle) =
@@ -207,7 +218,7 @@ arc (cx, cy) (a, b) (startAngle, endAngle) =
   in map f [0..n-1]
 
 toolTop : Length -> Form
-toolTop len = rect len 20
+toolTop len = rect len rulerTopHeight
               |> filled (rgba 0 128 128 0.5)
               |> moveX (len/2)
 
@@ -228,7 +239,7 @@ toolMarks len =
   in group <| map mark [0..floor (len / unitWidth)]
 
 toolBottom : Length -> Form
-toolBottom len = rect len 20
+toolBottom len = rect len rulerBottomHeight
                |> filled (rgba 0 128 128 0.5)
                |> moveX (len/2)
                |> \back -> group [back, toolMarks len]
