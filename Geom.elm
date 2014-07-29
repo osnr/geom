@@ -1,7 +1,6 @@
 import Dict
 import Text
 import Keyboard
-import Window
 import Touch as T
 
 type NormalizedTouch = { x:Float, y:Float, id:Int, x0:Float, y0:Float, t0:Time }
@@ -31,7 +30,7 @@ data Gesture = NoTouches
              | AdjustLength Length Finger Finger
              | Rotate Angle Finger Finger
 
-             | OneFingerOnePencil Finger Pencil
+             | OneFingerOnePencil Point Finger Pencil
              | DrawLine Finger Pencil Line
              | DrawArc Finger Pencil Arc
 
@@ -61,7 +60,7 @@ startTwoFingerGesture : Finger -> Finger -> DrawState -> Gesture
 startTwoFingerGesture f1 f2 ds =
   -- do some tan stuff to find the angle of the movement from f2's p0 to f2's p
   -- then return AdjustLength or Rotate
-  let angle = angularDist f2
+  let angle = angularDist f2 - ds.toolAngle
   in if (angle < degrees 45 && angle > degrees -45) || (angle > degrees 135 || angle < degrees -135)
        then AdjustLength ds.toolLength f1 f2 -- pulling left or right
        else Rotate ds.toolAngle f1 f2
@@ -74,6 +73,16 @@ gesture (fs, ps) ds =
     (OneFingerTranslate p0 f, f'::[], []) ->
       if f'.id == f.id
         then OneFingerTranslate p0 f'
+        else NoTouches
+
+    (OneFingerTranslate p0 f, f'::[], p::[]) ->
+      if f'.id == f.id
+        then OneFingerOnePencil p0 f' p
+        else NoTouches
+
+    (OneFingerOnePencil _ f1 p, f2'::f1'::[], []) ->
+      if f1'.id == f1.id
+        then TwoFingers f1' f2'
         else NoTouches
 
     (OneFingerTranslate _ f1, f2'::f1'::[], []) ->
@@ -173,11 +182,12 @@ displayProblem : Int -> Int -> Element
 displayProblem ww wh = collage ww wh [problem]
 
 -- overall display
+displayWidth = 1024
+displayHeight = 768
+
 displayS : Signal Element
-displayS = (\ds ww wh -> layers [asText ds, displayProblem ww wh, display ww wh ds])
+displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
            <~ (foldp update initialDrawState <| fingersPencils)
-            ~ Window.width
-            ~ Window.height
 
 -- touch analysis
 recenter : Int -> Int -> T.Touch -> NormalizedTouch
@@ -200,10 +210,7 @@ distinguish ts forceFinger =
               | otherwise ->
                 let nearestTouch = head <| byDistance ts'
                 in if findDistance nearestTouch t < 230
-                     then ({ t | x <- (nearestTouch.x + t.x) / 2,
-                                 y <- (nearestTouch.y + t.y) / 2,
-                                 x0 <- (nearestTouch.x0 + t.x0) / 2,
-                                 y0 <- (nearestTouch.y0 + t.y0) / 2 } :: fs,
+                     then (t :: fs,
                            ps,
                            t.id :: nearestTouch.id :: used)
                      else (fs, t :: ps, used)
@@ -214,10 +221,10 @@ distinguish ts forceFinger =
   in (fs, ps)
 
 touchesR : Signal [NormalizedTouch]
-touchesR = let recenterAndResortAll ww wh ts =
-                 let (cx, cy) = (ww `div` 2, wh `div` 2)
+touchesR = let recenterAndResortAll ts =
+                 let (cx, cy) = (displayWidth `div` 2, displayHeight `div` 2)
                  in map (recenter cx cy) <| sortBy ((\x -> -x) . .t0) ts
-           in recenterAndResortAll <~ Window.width ~ Window.height ~ T.touches
+           in recenterAndResortAll <~ T.touches
 
 fingersPencils : Signal ([Finger], [Pencil])
 fingersPencils = distinguish <~ touchesR ~ Keyboard.shift
@@ -233,13 +240,11 @@ pencilSymbol {x, y} = rect 50 50
                     |> move (x, y)
 
 touchesView : Signal Element
-touchesView = let viewTouches ww wh (fs, ps) = collage ww wh
-                                               <| map fingerSymbol fs ++ map pencilSymbol ps
-              in viewTouches <~ Window.width
-                              ~ Window.height
-                              ~ fingersPencils
+touchesView = let viewTouches (fs, ps) = collage displayWidth displayHeight
+                                       <| map fingerSymbol fs ++ map pencilSymbol ps
+              in viewTouches <~ fingersPencils
 
-main = (\x y z -> layers [x, y, plainText "\n\n" `above` z]) <~ touchesView ~ displayS ~ lift asText fingersPencils
+main = (\x y -> layers [spacer displayWidth displayHeight |> color gray, x, y]) <~ touchesView ~ displayS
 
 -- TODO put dots for fingers and/or pencils
 -- start working on rotation, drawing, etc
