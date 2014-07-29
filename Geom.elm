@@ -63,8 +63,7 @@ toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
 
 insideRuler : DrawState -> NTouch -> Bool
-insideRuler ds t = let end = toolEnd ds.toolStart ds.toolAngle ds.toolLength
-                   in norm (end `subv` (t.x, t.y)) < 100
+insideRuler ds t = norm (ds.toolStart `subv` (t.x, t.y)) < ds.toolLength / 2
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to do rotation or length adjustment
@@ -182,12 +181,18 @@ update ts ds =
          in { ds' | toolAngle <- atan2 (t2.y - ty) (t2.x - tx) }
 
        DrawLine t1 t2 (sx, sy) ->
-         let (ex, ey) = displacement t2
-         in { ds' | drawing <- DrawingLine ((sx, sy), (sx + ex*(cos ds.toolAngle), sy + ey*(sin ds.toolAngle))) }
+         let r = norm <| displacement t2
+         in { ds' | drawing <- DrawingLine ((sx, sy), (sx + r*(cos ds.toolAngle), sy + r*(sin ds.toolAngle))) }
        DrawArc t1 t2 c r ->
          { ds' | drawing <- DrawingArc (c, ds'.toolAngle, angularDist t2, r) }
 
-       otherwise -> { ds' | drawing <- NotDrawing } -- TODO get rid of drawing earlier
+       otherwise ->
+         case ds'.drawing of
+           NotDrawing -> ds'
+           DrawingLine l -> { ds' | drawing <- NotDrawing
+                                  , lines <- l :: ds'.lines } -- TODO get rid of drawing earlier
+           DrawingArc a -> { ds' | drawing <- NotDrawing
+                                 , arcs <- a :: ds'.arcs } -- TODO get rid of drawing earlier
 
 -- display
 unitWidth = 20
