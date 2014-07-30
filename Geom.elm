@@ -189,7 +189,7 @@ update ts ds =
          in { ds' | toolAngle <- atan2 (t2.y - ty) (t2.x - tx) }
 
        DrawLine t1 t2 (sx, sy) ->
-         let r = norm <| displacement t2
+         let r = min (norm <| displacement t2) (ds.toolLength)
          in { ds' | drawing <- DrawingLine ((sx, sy), (sx + r*(cos ds.toolAngle), sy + r*(sin ds.toolAngle))) }
        DrawArc t1 t2 c r ->
          { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle, angularDist t2) }
