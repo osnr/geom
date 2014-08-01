@@ -63,12 +63,12 @@ toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
 
 distToSegment p v w =
-  let (px, py) = p
-      (x1, y1) = v
-      (x2, y2) = w
+  let (px, py) = Debug.log "p" p
+      (x1, y1) = Debug.log "v" v
+      (x2, y2) = Debug.log "w" w
 
-      l2 = dist v w
-  
+      l2 = (dist v w)^2
+
   in if l2 == 0
        then dist p v
        else let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2
@@ -106,7 +106,7 @@ startFingerPencilGesture t1 t2 ds =
        else DrawArc t1 t2 ds.toolStart ds.toolLength
 
 gesture : [NTouch] -> DrawState -> Gesture
-gesture ts ds = Debug.log "gesture state" <|
+gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
     (NoTouches, t::[]) -> Translate ds.toolStart (t.x, t.y) t
 
