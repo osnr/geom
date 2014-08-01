@@ -25,13 +25,11 @@ data Drawing = NotDrawing | DrawingLine Line | DrawingArc Arc
 
 data Gesture = NoTouches
 
-             | Translate Point NTouch
+             | Translate Point Point NTouch -- the second point, t0, is where you were touching when translation started
 
              | TwoFingers NTouch NTouch -- before we've figured out which one
              | AdjustLength Length NTouch NTouch
              | Rotate Angle NTouch NTouch
-
-             | OneFinger NTouch -- right after you let go of adj-len or rot, the first finger shouldn't translate
 
              | OneFingerOnePencil NTouch NTouch -- before we've figured out which one
              | DrawLine NTouch NTouch Point
@@ -53,6 +51,8 @@ norm (x, y) = sqrt <| x^2 + y^2
 addv (x1, y1) (x2, y2) = (x1 + x2, y1 + y2)
 subv (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
 
+dist v w = norm <| subv v w
+
 displacement : NTouch -> Point
 displacement t = (t.x - t.x0, t.y - t.y0)
 
@@ -62,16 +62,28 @@ angularDist t = atan2 (t.y - t.y0) (t.x - t.x0)
 toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
 
+distToSegment p v w =
+  let (px, py) = p
+      (x1, y1) = v
+      (x2, y2) = w
+
+      l2 = dist v w
+  
+  in if l2 == 0
+       then dist p v
+       else let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2
+            in if | t < 0 -> dist p v
+                  | t > 1 -> dist p w
+                  | otherwise -> dist p ( x1 + t * (x2 - x1)
+                                        , y1 + t * (y2 - y1) )
+
 insideRuler : DrawState -> NTouch -> Bool
 insideRuler ds {x, y} =
-  let (sx, sy) = ds.toolStart
-      (ex, ey) = (sx + ds.toolLength*(cos ds.toolAngle), sy + ds.toolLength*(sin ds.toolAngle))
+  let start = ds.toolStart
+      end = toolEnd start ds.toolAngle ds.toolLength
 
-      dx = ex - sx
-      dy = ey - sy
-
-      dist = abs (dy*x - dx*y - sx*ey + ex*sy) / sqrt (dx^2 + dy^2)
-  in dist < 50
+      distToRuler = Debug.log "distToRuler" <| distToSegment (x, y) start end
+  in distToRuler < 50
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to do rotation or length adjustment
@@ -94,24 +106,18 @@ startFingerPencilGesture t1 t2 ds =
        else DrawArc t1 t2 ds.toolStart ds.toolLength
 
 gesture : [NTouch] -> DrawState -> Gesture
-gesture ts ds =
+gesture ts ds = Debug.log "gesture state" <|
   case (ds.gesture, ts) of
-    (NoTouches, t::[]) -> Translate ds.toolStart t
+    (NoTouches, t::[]) -> Translate ds.toolStart (t.x, t.y) t
 
-    (Translate p0 t, t'::[]) ->
+    (Translate p0 t0 t, t'::[]) ->
       if t'.id == t.id
-        then Translate p0 t'
+        then Translate p0 t0 t'
         else NoTouches
 
-    (Translate _ t1, t2'::t1'::[]) ->
+    (Translate _ _ t1, t2'::t1'::[]) ->
       if t1'.id == t1.id
-        then if Debug.log "insideRuler" <| insideRuler ds t2'
-               then OneFingerOnePencil t1' t2'
-               else TwoFingers t1' t2'
-        else NoTouches
-    (OneFinger t1, t2'::t1'::[]) ->
-      if t1'.id == t1.id
-        then if Debug.log "insideRuler 2" <| insideRuler ds t2'
+        then if insideRuler ds t2'
                then OneFingerOnePencil t1' t2'
                else TwoFingers t1' t2'
         else NoTouches
@@ -137,15 +143,11 @@ gesture ts ds =
 
     (AdjustLength _ t1 t2, t'::[]) ->
       if t'.id == t1.id || t'.id == t2.id 
-        then OneFinger t'
+        then Translate ds.toolStart (t'.x, t'.y) t'
         else NoTouches
     (Rotate _ t1 t2, t'::[]) -> 
       if t'.id == t1.id || t'.id == t2.id 
-        then OneFinger t'
-        else NoTouches
-    (OneFinger t, t'::[]) ->
-      if t'.id == t.id
-        then OneFinger t'
+        then Translate ds.toolStart (t'.x, t'.y) t'
         else NoTouches
 
     -- pencil stuff
@@ -168,11 +170,11 @@ gesture ts ds =
 
     (DrawLine t1 t2 _, t'::[]) ->
       if t'.id == t1.id || t'.id == t2.id 
-        then OneFinger t'
+        then Translate ds.toolStart (t'.x, t'.y) t'
         else NoTouches
     (DrawArc t1 t2 _ _, t'::[]) -> 
       if t'.id == t1.id || t'.id == t2.id 
-        then OneFinger t'
+        then Translate ds.toolStart (t'.x, t'.y) t'
         else NoTouches
 
     (_, _) -> NoTouches
@@ -182,7 +184,7 @@ update ts ds =
   let gest = gesture ts ds
       ds' = { ds | gesture <- gest }
   in case gest of
-       Translate p0 t -> { ds' | toolStart <- p0 `addv` displacement t }
+       Translate p0 (tx0, ty0) t -> { ds' | toolStart <- p0 `addv` ((t.x, t.y) `subv` (tx0, ty0))}
        AdjustLength l0 _ t2 -> { ds' | toolLength <- l0 + (t2.x - t2.x0) * cos ds'.toolAngle + (t2.y - t2.y0) * sin ds'.toolAngle }
        Rotate a0 t1 t2 ->
          let (tx, ty) = ds'.toolStart
