@@ -63,9 +63,9 @@ toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
 
 distToSegment p v w =
-  let (px, py) = Debug.log "p" p
-      (x1, y1) = Debug.log "v" v
-      (x2, y2) = Debug.log "w" w
+  let (px, py) = p
+      (x1, y1) = v
+      (x2, y2) = w
 
       l2 = (dist v w)^2
 
@@ -191,8 +191,12 @@ update ts ds =
          in { ds' | toolAngle <- atan2 (t2.y - ty) (t2.x - tx) }
 
        DrawLine t1 t2 (sx, sy) ->
-         let r = min (norm <| displacement t2) (ds.toolLength)
-         in { ds' | drawing <- DrawingLine ((sx, sy), (sx + r*(cos ds.toolAngle), sy + r*(sin ds.toolAngle))) }
+         let theta = angularDist t2 - ds.toolAngle
+             r = (norm (displacement t2)) * cos theta
+             lineLength = min ds.toolLength <| max 0 r
+         in { ds' | drawing <- DrawingLine ((sx, sy),
+                                            (sx + lineLength*(cos ds.toolAngle),
+                                             sy + lineLength*(sin ds.toolAngle))) }
        DrawArc t1 t2 c r ->
          { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle, angularDist t2) }
 
