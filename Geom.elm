@@ -25,15 +25,15 @@ data Drawing = NotDrawing | DrawingLine Line | DrawingArc Arc
 
 data Gesture = NoTouches
 
-             | Translate Point Point NTouch -- the second point, t0, is where you were touching when translation started
+             | Translate { p0:Point, tp0:Point, t:NTouch }
 
-             | TwoFingers NTouch NTouch -- before we've figured out which one
-             | AdjustLength Length NTouch NTouch
-             | Rotate Angle NTouch NTouch
+             | TwoFingers { t1:NTouch, t2:NTouch } -- before we've figured out which one
+             | AdjustLength { l0:Length, t1:NTouch, t2:NTouch }
+             | Rotate { a0:Angle, t1:NTouch, t2:NTouch }
 
-             | OneFingerOnePencil NTouch NTouch -- before we've figured out which one
-             | DrawLine NTouch NTouch Point
-             | DrawArc NTouch NTouch Point Length
+             | OneFingerOnePencil { t1:NTouch, t2:NTouch } -- before we've figured out which one
+             | DrawLine { t1:NTouch, t2:NTouch, p1:Point }
+             | DrawArc { t1:NTouch, t2:NTouch, c:Point, r:Length }
 
 -- updating state
 initialDrawState : DrawState
@@ -93,8 +93,8 @@ startTwoFingerGesture t1 t2 ds =
   -- then return AdjustLength or Rotate
   let angle = angularDist t2 - ds.toolAngle
   in if (angle < degrees 45 && angle > degrees -45) || (angle > degrees 135 || angle < degrees -135)
-       then AdjustLength ds.toolLength t1 t2 -- pulling left or right
-       else Rotate ds.toolAngle t1 t2
+       then AdjustLength { l0 = ds.toolLength, t1 = t1, t2 = t2 } -- pulling left or right
+       else Rotate { a0 = ds.toolAngle, t1 = t1, t2 = t2 }
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to draw a line or an arc
@@ -102,79 +102,79 @@ startFingerPencilGesture : NTouch -> NTouch -> DrawState -> Gesture
 startFingerPencilGesture t1 t2 ds =
   let angle = angularDist t2 - ds.toolAngle
   in if (angle < degrees 45 && angle > degrees -45) || (angle > degrees 135 || angle < degrees -135)
-       then DrawLine t1 t2 ds.toolStart
-       else DrawArc t1 t2 ds.toolStart ds.toolLength
+       then DrawLine { t1 = t1, t2 = t2, p1 = ds.toolStart }
+       else DrawArc { t1 = t1, t2 = t2, c = ds.toolStart, r = ds.toolLength }
 
 gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
-    (NoTouches, t::[]) -> Translate ds.toolStart (t.x, t.y) t
+    (NoTouches, t::[]) -> Translate { p0 = ds.toolStart, tp0 = (t.x, t.y), t = t }
 
-    (Translate p0 t0 t, t'::[]) ->
-      if t'.id == t.id
-        then Translate p0 t0 t'
+    (Translate trans, t'::[]) ->
+      if t'.id == trans.t.id
+        then Translate { trans | t <- t' }
         else NoTouches
 
-    (Translate _ _ t1, t2'::t1'::[]) ->
-      if t1'.id == t1.id
+    (Translate trans, t2'::t1'::[]) ->
+      if t1'.id == trans.t.id
         then if insideRuler ds t2'
-               then OneFingerOnePencil t1' t2'
-               else TwoFingers t1' t2'
+               then OneFingerOnePencil { t1 = t1', t2 = t2' }
+               else TwoFingers { t1 = t1', t2 = t2' }
         else NoTouches
 
     -- two finger rotate/adj length stuff
-    (TwoFingers t1 t2, t2'::t1'::[]) ->
+    (TwoFingers twof, t2'::t1'::[]) ->
       -- dispatch only if the distance t2 has moved is big enough
-      if t1'.id == t1.id && t2'.id == t2.id
-        then if norm (displacement t2') > 100 
+      if t1'.id == twof.t1.id && t2'.id == twof.t2.id
+        then if norm (displacement t2') > 100
                then startTwoFingerGesture t1' t2' ds
-               else TwoFingers t1' t2'
+               else TwoFingers { twof | t1 <- t1', t2 <- t2' }
         else NoTouches
 
-    (AdjustLength l0 t1 t2, t2'::t1'::[]) ->
-      if t1'.id == t1.id && t2'.id == t2.id
-        then AdjustLength l0 t1' t2'
+    (AdjustLength adj, t2'::t1'::[]) ->
+      if t1'.id == adj.t1.id && t2'.id == adj.t2.id
+        then AdjustLength { adj | t1 <- t1', t2 <- t2' }
         else NoTouches
 
-    (Rotate a0 t1 t2, t2'::t1'::[]) ->
-      if t1'.id == t1.id && t2'.id == t2.id
-        then Rotate a0 t1' t2'
+    (Rotate rot, t2'::t1'::[]) ->
+      if t1'.id == rot.t1.id && t2'.id == rot.t2.id
+        then Rotate { rot | t1 <- t1', t2 <- t2' }
         else NoTouches
 
-    (AdjustLength _ t1 t2, t'::[]) ->
-      if t'.id == t1.id || t'.id == t2.id 
-        then Translate ds.toolStart (t'.x, t'.y) t'
+    (AdjustLength adj, t'::[]) ->
+      if t'.id == adj.t1.id || t'.id == adj.t2.id 
+        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
         else NoTouches
-    (Rotate _ t1 t2, t'::[]) -> 
-      if t'.id == t1.id || t'.id == t2.id 
-        then Translate ds.toolStart (t'.x, t'.y) t'
+    (Rotate rot, t'::[]) -> 
+      if t'.id == rot.t1.id || t'.id == rot.t2.id 
+        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
         else NoTouches
 
     -- pencil stuff
-    (OneFingerOnePencil t1 t2, t2'::t1'::[]) ->
-      if t1'.id == t1.id && t2'.id == t2.id
+    (OneFingerOnePencil ofop, t2'::t1'::[]) ->
+      if t1'.id == ofop.t1.id && t2'.id == ofop.t2.id
         then if norm (displacement t2') > 100
                then startFingerPencilGesture t1' t2' ds
-               else OneFingerOnePencil t1 t2
+               else OneFingerOnePencil { ofop | t1 <- t1', t2 <- t2' }
         else NoTouches
 
-    (DrawLine t1 t2 l, t2'::t1'::[]) ->
-      if t1'.id == t1.id && t2'.id == t2.id
-        then DrawLine t1' t2' l
+    (DrawLine dl, t2'::t1'::[]) ->
+      if t1'.id == dl.t1.id && t2'.id == dl.t2.id
+        then DrawLine { dl | t1 <- t1', t2 <- t2' }
         else NoTouches
 
-    (DrawArc t1 t2 c r, t2'::t1'::[]) ->
-      if t1'.id == t1.id && t2'.id == t2.id
-        then DrawArc t1' t2' c r
+    (DrawArc da, t2'::t1'::[]) ->
+      if t1'.id == da.t1.id && t2'.id == da.t2.id
+        then DrawArc { da | t1 <- t1', t2 <- t2' }
         else NoTouches
 
-    (DrawLine t1 t2 _, t'::[]) ->
-      if t'.id == t1.id || t'.id == t2.id 
-        then Translate ds.toolStart (t'.x, t'.y) t'
+    (DrawLine dl, t'::[]) ->
+      if t'.id == dl.t1.id || t'.id == dl.t2.id
+        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
         else NoTouches
-    (DrawArc t1 t2 _ _, t'::[]) -> 
-      if t'.id == t1.id || t'.id == t2.id 
-        then Translate ds.toolStart (t'.x, t'.y) t'
+    (DrawArc da, t'::[]) -> 
+      if t'.id == da.t1.id || t'.id == da.t2.id
+        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
         else NoTouches
 
     (_, _) -> NoTouches
@@ -184,20 +184,25 @@ update ts ds =
   let gest = gesture ts ds
       ds' = { ds | gesture <- gest }
   in case gest of
-       Translate p0 (tx0, ty0) t -> { ds' | toolStart <- p0 `addv` ((t.x, t.y) `subv` (tx0, ty0))}
-       AdjustLength l0 _ t2 -> { ds' | toolLength <- l0 + (t2.x - t2.x0) * cos ds'.toolAngle + (t2.y - t2.y0) * sin ds'.toolAngle }
-       Rotate a0 t1 t2 ->
+       Translate { p0, tp0, t } ->
+         { ds' | toolStart <- p0 `addv` ((t.x, t.y) `subv` tp0)}
+
+       AdjustLength { l0, t2 } ->
+         { ds' | toolLength <- l0 + (t2.x - t2.x0) * cos ds'.toolAngle +
+                                    (t2.y - t2.y0) * sin ds'.toolAngle }
+
+       Rotate { a0, t1, t2 } ->
          let (tx, ty) = ds'.toolStart
          in { ds' | toolAngle <- atan2 (t2.y - ty) (t2.x - tx) }
 
-       DrawLine t1 t2 (sx, sy) ->
+       DrawLine { t1, t2, p1 } ->
          let theta = angularDist t2 - ds.toolAngle
              r = (norm (displacement t2)) * cos theta
              lineLength = min ds.toolLength <| max 0 r
-         in { ds' | drawing <- DrawingLine ((sx, sy),
-                                            (sx + lineLength*(cos ds.toolAngle),
-                                             sy + lineLength*(sin ds.toolAngle))) }
-       DrawArc t1 t2 c r ->
+         in { ds' | drawing <- DrawingLine (p1,
+                                            (fst p1 + lineLength*(cos ds.toolAngle),
+                                             snd p1 + lineLength*(sin ds.toolAngle))) }
+       DrawArc { t1, t2, c, r } ->
          { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle, angularDist t2) }
 
        otherwise ->
