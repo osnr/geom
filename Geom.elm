@@ -85,25 +85,29 @@ insideRuler ds {x, y} =
       distToRuler = Debug.log "distToRuler" <| distToSegment (x, y) start end
   in distToRuler < 50
 
+-- used to determine whether we're lengthening ruler / drawing a line
+-- or rotating ruler / drawing an arc.
+-- check whether the user's gesture has been more in a parallel or perpendicular direction
+isTouchParallel : Angle -> NTouch -> Bool
+isTouchParallel toolAngle t =
+  let theta = angularDist t - toolAngle
+  in (theta < degrees 45 && theta > degrees -45) || (theta > degrees 135 || theta < degrees -135)
+
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to do rotation or length adjustment
 startTwoFingerGesture : NTouch -> NTouch -> DrawState -> Gesture
 startTwoFingerGesture t1 t2 ds =
-  -- do some tan stuff to find the angle of the movement from t2's p0 to t2's p
-  -- then return AdjustLength or Rotate
-  let angle = angularDist t2 - ds.toolAngle
-  in if (angle < degrees 45 && angle > degrees -45) || (angle > degrees 135 || angle < degrees -135)
-       then AdjustLength { l0 = ds.toolLength, t1 = t1, t2 = t2 } -- pulling left or right
-       else Rotate { a0 = ds.toolAngle, t1 = t1, t2 = t2 }
+  if isTouchParallel ds.toolAngle t2
+    then AdjustLength { l0 = ds.toolLength, t1 = t1, t2 = t2 } -- pulling left or right
+    else Rotate { a0 = ds.toolAngle, t1 = t1, t2 = t2 }
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to draw a line or an arc
 startFingerPencilGesture : NTouch -> NTouch -> DrawState -> Gesture
 startFingerPencilGesture t1 t2 ds =
-  let angle = angularDist t2 - ds.toolAngle
-  in if (angle < degrees 45 && angle > degrees -45) || (angle > degrees 135 || angle < degrees -135)
-       then DrawLine { t1 = t1, t2 = t2, p1 = ds.toolStart }
-       else DrawArc { t1 = t1, t2 = t2, c = ds.toolStart, r = ds.toolLength }
+  if isTouchParallel ds.toolAngle t2
+    then DrawLine { t1 = t1, t2 = t2, p1 = ds.toolStart }
+    else DrawArc { t1 = t1, t2 = t2, c = ds.toolStart, r = ds.toolLength }
 
 gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
@@ -126,7 +130,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     (TwoFingers twof, t2'::t1'::[]) ->
       -- dispatch only if the distance t2 has moved is big enough
       if t1'.id == twof.t1.id && t2'.id == twof.t2.id
-        then if norm (displacement t2') > 100
+        then if norm (displacement t2') > 50
                then startTwoFingerGesture t1' t2' ds
                else TwoFingers { twof | t1 <- t1', t2 <- t2' }
         else NoTouches
