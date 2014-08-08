@@ -21,7 +21,7 @@ type Length = Float
 type Line = (Point, Point)
 type Arc = (Point, Length, Angle, Angle)
 
-data Drawing = NotDrawing | DrawingLine Line | DrawingArc Arc
+data Drawing = NotDrawing | DrawingLine Line | DrawingArc (Maybe Angle) Arc
 
 data Gesture = NoTouches
 
@@ -225,21 +225,32 @@ update ts ds =
              arcAngle' = atan2 (t2.y - sy) (t2.x - sx)
          in { ds' | drawing <-
                case ds'.drawing of
-                 DrawingArc (_, _, _, arcAngle) ->
-                   DrawingArc (c, r, ds'.toolAngle,
-                                bound (-2*pi, 2*pi) <|
-                                if abs (arcAngle - arcAngle') > pi
-                                  then -arcAngle' + 2*pi
-                                  else arcAngle'
-                              )
-                 _ -> DrawingArc (c, r, ds'.toolAngle, arcAngle') }
+                 DrawingArc counter (_, _, _, arcAngle) ->
+                   let counter' =
+                       case counter of
+                         Nothing -> if abs (arcAngle - arcAngle') > pi
+                                    then Just arcAngle
+                                    else Nothing
+                         Just oldAngle -> if abs (oldAngle - arcAngle') > pi
+                                          then Just oldAngle
+                                          else Nothing
+                   in DrawingArc counter'
+                                 (c, r, ds'.toolAngle,
+                                  (\a -> let quot = a / (2 * pi)
+                                             remd = quot - toFloat (truncate quot)
+                                         in remd * 2 * pi) <| -- bound it
+                                  case counter of
+                                    Nothing -> arcAngle'
+                                    Just oldAngle -> oldAngle
+                                 )
+                 _ -> DrawingArc Nothing (c, r, ds'.toolAngle, arcAngle') }
        otherwise ->
          case ds'.drawing of
            NotDrawing -> ds'
            DrawingLine l -> { ds' | drawing <- NotDrawing
                                   , lines <- l :: ds'.lines } -- TODO get rid of drawing earlier
-           DrawingArc a -> { ds' | drawing <- NotDrawing
-                                 , arcs <- a :: ds'.arcs } -- TODO get rid of drawing earlier
+           DrawingArc _ a -> { ds' | drawing <- NotDrawing
+                                   , arcs <- a :: ds'.arcs } -- TODO get rid of drawing earlier
 
 -- display
 unitWidth = 20
@@ -295,12 +306,12 @@ display ww wh { lines, arcs, toolStart, toolAngle, toolLength, drawing } =
                          <| case drawing of
                               NotDrawing -> lines
                               DrawingLine l -> l :: lines
-                              DrawingArc _ -> lines
+                              DrawingArc _ _ -> lines
             arcForms = map (\(c, l, a1, a2) -> traced defaultLine <| arc c (l, l) (a1, a2))
                        <| case drawing of
                             NotDrawing -> arcs
                             DrawingLine _ -> arcs
-                            DrawingArc a -> a :: arcs
+                            DrawingArc _ a -> a :: arcs
         in collage ww wh <| linesForms ++ arcForms ++ [displayTool toolStart toolAngle toolLength]
 
 -- problem display
@@ -321,8 +332,8 @@ displayProblem : Int -> Int -> Element
 displayProblem ww wh = collage ww wh [problem]
 
 -- overall display
-displayWidth = 1024
-displayHeight = 768
+displayWidth = 1371
+displayHeight = 660
 
 displayS : Signal Element
 displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
