@@ -361,8 +361,8 @@ data Action = Touches [NTouch] | ChangeMode Mode
 actions = merge (lift Touches touchesR) (lift ChangeMode mode.signal)
 
 -- overall display
-displayWidth = 1024
-displayHeight = 768
+displayWidth = 1371
+displayHeight = 660
 
 displayS : Signal Element
 displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
