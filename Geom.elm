@@ -342,23 +342,17 @@ touchesView = let viewTouches ts = collage displayWidth displayHeight
 -- modes
 data Mode = Ruler | Draw
 
-mode : I.Input Mode
-mode = I.input Ruler
+port modeString : Signal String
 
-modesBox : Mode -> Element
-modesBox m = flow down [ I.button mode.handle Ruler "Ruler"
-                         |> case m of
-                              Ruler -> color blue
-                              _     -> id
-                       , I.button mode.handle Draw "Draw"
-                         |> case m of
-                              Draw -> color blue
-                              _    -> id ]
+mode : Signal Mode
+mode = (\ms -> case ms of
+                 "ruler" -> Ruler
+                 "draw" -> Draw) <~ modeString
 
 -- merging
 data Action = Touches [NTouch] | ChangeMode Mode
 
-actions = merge (lift Touches touchesR) (lift ChangeMode mode.signal)
+actions = merge (lift Touches touchesR) (lift ChangeMode mode)
 
 -- overall display
 displayWidth = 1371
@@ -368,4 +362,4 @@ displayS : Signal Element
 displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
            <~ (foldp update initialDrawState <| actions)
 
-main = (\x y z -> layers [spacer displayWidth displayHeight |> color gray, x, y, z]) <~ touchesView ~ displayS ~ lift modesBox mode.signal
+main = (\x y -> layers [spacer displayWidth displayHeight |> color gray, x, y]) <~ touchesView ~ displayS
