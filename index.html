@@ -7,6 +7,10 @@
 
         <script src="lib/elm-runtime.js"></script>
         <script src="Geom.js"></script>
+
+        <style>
+            .selected { background-color: blue; }
+        </style>
     </head>
     <body style="overflow: hidden; zoom: reset;">
         <script>
@@ -21,8 +25,25 @@
             }, false);
         </script>
 
+        <div style="position: fixed; height: 300px; width: 100px; top: 0; right: 0; z-index: 10;">
+            <button class="selected" style="width: 100%; height: 50%" id="ruler">Ruler</button>
+            <button style="width: 100%; height: 50%" id="draw">Draw</button>
+        </div>
+
         <script>
-            Elm.fullscreen(Elm.Main);
+            var geom = Elm.fullscreen(Elm.Main, { modeString: "ruler" });
+            var ruler = document.getElementById("ruler");
+            var draw = document.getElementById("draw");
+            ruler.ontouchstart = function() {
+                ruler.className = "selected";
+                draw.className = "";
+                geom.ports.modeString.send("ruler");
+            };
+            draw.ontouchstart = function() {
+                draw.className = "selected";
+                ruler.className = ""
+                geom.ports.modeString.send("draw");
+            };
         </script>
     </body>
 </html>

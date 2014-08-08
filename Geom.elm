@@ -4,13 +4,19 @@ import Keyboard
 import Debug
 import Touch as T
 
+import Graphics.Input as I
+
 type NTouch = { x:Float, y:Float, id:Int, x0:Float, y0:Float, t0:Time }
 
 type DrawState = { lines : [Line]
                  , arcs : [Arc]
+
                  , toolStart : Point
                  , toolAngle : Angle
                  , toolLength : Length
+
+                 , mode : Mode
+
                  , gesture : Gesture
                  , drawing : Drawing }
 
@@ -27,13 +33,13 @@ data Gesture = NoTouches
 
              | Translate { p0:Point, tp0:Point, t:NTouch }
 
-             | TwoFingers { t1:NTouch, t2:NTouch } -- before we've figured out which one
-             | AdjustLength { l0:Length, t1:NTouch, t2:NTouch }
-             | Rotate { a0:Angle, t1:NTouch, t2:NTouch }
+             | TouchEnd { t:NTouch } -- before we've figured out which one
+             | AdjustLength { l0:Length, t:NTouch }
+             | Rotate { a0:Angle, t:NTouch }
 
-             | OneFingerOnePencil { t1:NTouch, t2:NTouch } -- before we've figured out which one
-             | DrawLine { t1:NTouch, t2:NTouch, p1:Point }
-             | DrawArc { t1:NTouch, t2:NTouch, c:Point, r:Length }
+             | PencilEnd { t:NTouch } -- before we've figured out which one
+             | DrawLine { t:NTouch, p1:Point }
+             | DrawArc { t:NTouch, c:Point, r:Length }
 
 -- updating state
 initialDrawState : DrawState
@@ -42,6 +48,9 @@ initialDrawState = { lines = []
                    , toolStart = (0, 0)
                    , toolAngle = 0
                    , toolLength = 300
+
+                   , mode = Ruler -- kind of annoying that this is duplicated
+
                    , gesture = NoTouches
                    , drawing = NotDrawing }
 
@@ -101,98 +110,91 @@ isTouchParallel toolAngle t =
   let theta = angularDist t - toolAngle
   in (theta < degrees 45 && theta > degrees -45) || (theta > degrees 135 || theta < degrees -135)
 
--- t1 is the fixed finger (the one that went down first)
--- t2 is the finger that's moving to do rotation or length adjustment
-startTwoFingerGesture : NTouch -> NTouch -> DrawState -> Gesture
-startTwoFingerGesture t1 t2 ds =
-  if isTouchParallel ds.toolAngle t2
-    then AdjustLength { l0 = ds.toolLength, t1 = t1, t2 = t2 } -- pulling left or right
-    else Rotate { a0 = ds.toolAngle, t1 = t1, t2 = t2 }
+startEndGesture : NTouch -> DrawState -> Gesture
+startEndGesture t ds =
+  if isTouchParallel ds.toolAngle t
+    then AdjustLength { l0 = ds.toolLength, t = t } -- pulling left or right
+    else Rotate { a0 = ds.toolAngle, t = t }
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to draw a line or an arc
-startFingerPencilGesture : NTouch -> NTouch -> DrawState -> Gesture
-startFingerPencilGesture t1 t2 ds =
-  if isTouchParallel ds.toolAngle t2
-    then DrawLine { t1 = t1, t2 = t2, p1 = ds.toolStart }
-    else DrawArc { t1 = t1, t2 = t2, c = ds.toolStart, r = ds.toolLength }
+startPencilEndGesture : NTouch -> DrawState -> Gesture
+startPencilEndGesture t ds =
+  if isTouchParallel ds.toolAngle t
+    then DrawLine { t = t, p1 = ds.toolStart }
+    else DrawArc { t = t, c = ds.toolStart, r = ds.toolLength }
 
 gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
-    (NoTouches, t::[]) -> Translate { p0 = ds.toolStart, tp0 = (t.x, t.y), t = t }
+    (NoTouches, t::[]) ->
+      let tsDist = dist (t.x, t.y) ds.toolStart
+          teDist = dist (t.x, t.y) (toolEnd ds.toolStart ds.toolAngle ds.toolLength)
+      in if | tsDist < teDist && tsDist < 200 ->
+              case ds.mode of
+                Ruler -> Translate { p0 = ds.toolStart
+                                   , tp0 = (t.x, t.y)
+                                   , t = t }
+                _     -> NoTouches
+
+            | teDist <= tsDist && teDist < 200 ->
+              case ds.mode of
+                Ruler -> TouchEnd { t = t }
+                Draw  -> PencilEnd { t = t }
+
+            | otherwise -> NoTouches
 
     (Translate trans, t'::[]) ->
       if t'.id == trans.t.id
         then Translate { trans | t <- t' }
         else NoTouches
 
-    (Translate trans, t2'::t1'::[]) ->
-      if t1'.id == trans.t.id
-        then if insideRuler ds t2'
-               then OneFingerOnePencil { t1 = t1', t2 = t2' }
-               else TwoFingers { t1 = t1', t2 = t2' }
-        else NoTouches
-
-    -- two finger rotate/adj length stuff
-    (TwoFingers twof, t2'::t1'::[]) ->
+    -- rotate/adj length stuff
+    (TouchEnd ep, t'::[]) ->
       -- dispatch only if the distance t2 has moved is big enough
-      if t1'.id == twof.t1.id && t2'.id == twof.t2.id
-        then if norm (displacement t2') > 50
-               then startTwoFingerGesture t1' t2' ds
-               else TwoFingers { twof | t1 <- t1', t2 <- t2' }
-        else NoTouches
-
-    (AdjustLength adj, t2'::t1'::[]) ->
-      if t1'.id == adj.t1.id && t2'.id == adj.t2.id
-        then AdjustLength { adj | t1 <- t1', t2 <- t2' }
-        else NoTouches
-
-    (Rotate rot, t2'::t1'::[]) ->
-      if t1'.id == rot.t1.id && t2'.id == rot.t2.id
-        then Rotate { rot | t1 <- t1', t2 <- t2' }
+      if t'.id == ep.t.id
+        then if norm (displacement t') > 20
+               then startEndGesture t' ds
+               else TouchEnd { ep | t <- t' }
         else NoTouches
 
     (AdjustLength adj, t'::[]) ->
-      if t'.id == adj.t1.id || t'.id == adj.t2.id 
-        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
+      if t'.id == adj.t.id
+        then AdjustLength { adj | t <- t' }
         else NoTouches
-    (Rotate rot, t'::[]) -> 
-      if t'.id == rot.t1.id || t'.id == rot.t2.id 
-        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
+
+    (Rotate rot, t'::[]) ->
+      if t'.id == rot.t.id
+        then Rotate { rot | t <- t' }
         else NoTouches
 
     -- pencil stuff
-    (OneFingerOnePencil ofop, t2'::t1'::[]) ->
-      if t1'.id == ofop.t1.id && t2'.id == ofop.t2.id
-        then if norm (displacement t2') > 50
-               then startFingerPencilGesture t1' t2' ds
-               else OneFingerOnePencil { ofop | t1 <- t1', t2 <- t2' }
-        else NoTouches
-
-    (DrawLine dl, t2'::t1'::[]) ->
-      if t1'.id == dl.t1.id && t2'.id == dl.t2.id
-        then DrawLine { dl | t1 <- t1', t2 <- t2' }
-        else NoTouches
-
-    (DrawArc da, t2'::t1'::[]) ->
-      if t1'.id == da.t1.id && t2'.id == da.t2.id
-        then DrawArc { da | t1 <- t1', t2 <- t2' }
+    (PencilEnd de, t'::[]) ->
+      if t'.id == de.t.id
+        then if norm (displacement t') > 20
+               then startPencilEndGesture t' ds
+               else PencilEnd { de | t <- t' }
         else NoTouches
 
     (DrawLine dl, t'::[]) ->
-      if t'.id == dl.t1.id || t'.id == dl.t2.id
-        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
+      if t'.id == dl.t.id
+        then DrawLine { dl | t <- t' }
         else NoTouches
-    (DrawArc da, t'::[]) -> 
-      if t'.id == da.t1.id || t'.id == da.t2.id
-        then Translate { p0 = ds.toolStart, tp0 = (t'.x, t'.y), t = t' }
+
+    (DrawArc da, t'::[]) ->
+      if t'.id == da.t.id
+        then DrawArc { da | t <- t' }
         else NoTouches
 
     (_, _) -> NoTouches
 
-update : [NTouch] -> DrawState -> DrawState
-update ts ds =
+update : Action -> DrawState -> DrawState
+update a ds = case a of
+                Touches ts -> touchesUpdate ts ds
+                ChangeMode m -> { ds | mode <- m }
+
+touchesUpdate : [NTouch] -> DrawState -> DrawState
+touchesUpdate ts ds =
   let gest = gesture ts ds
       ds' = { ds | gesture <- gest }
   in case gest of
@@ -201,28 +203,29 @@ update ts ds =
                           <| p0 `addv` ((t.x, t.y) `subv` tp0)
          in { ds' | toolStart <- toolStart' }
 
-       AdjustLength { l0, t2 } ->
-         let toolLength' = l0 + (t2.x - t2.x0) * cos ds'.toolAngle +
-                                (t2.y - t2.y0) * sin ds'.toolAngle
+       AdjustLength { l0, t } ->
+         let toolLength' = l0 + (t.x - t.x0) * cos ds'.toolAngle +
+                                (t.y - t.y0) * sin ds'.toolAngle
          in { ds' | toolLength <- bound (0, displayWidth) toolLength' }
 
-       Rotate { a0, t1, t2 } ->
+       Rotate { a0, t } ->
          let (sx, sy) = ds'.toolStart
              (ex', ey') = boundPoint ((-displayWidth/2, displayWidth/2),
                                       (-displayHeight/2, displayHeight/2))
-                                     (t2.x, t2.y)
+                                     (t.x, t.y)
          in { ds' | toolAngle <- atan2 (ey' - sy) (ex' - sx) }
 
-       DrawLine { t1, t2, p1 } ->
-         let theta = angularDist t2 - ds.toolAngle
-             r = (norm (displacement t2)) * cos theta
+       DrawLine { t, p1 } ->
+         let theta = angularDist t - ds.toolAngle
+             r = (norm (displacement t)) * cos theta
              lineLength = bound (0, ds.toolLength) r
          in { ds' | drawing <- DrawingLine (p1,
                                             (fst p1 + lineLength*(cos ds.toolAngle),
                                              snd p1 + lineLength*(sin ds.toolAngle))) }
-       DrawArc { t1, t2, c, r } ->
+
+       DrawArc { t, c, r } ->
          let (sx, sy) = ds'.toolStart
-             arcAngle' = atan2 (t2.y - sy) (t2.x - sx)
+             arcAngle' = atan2 (t.y - sy) (t.x - sx)
          in { ds' | drawing <-
                case ds'.drawing of
                  DrawingArc counter (_, _, _, arcAngle) ->
@@ -244,6 +247,7 @@ update ts ds =
                                     Just oldAngle -> oldAngle + pi + arcAngle'
                                  )
                  _ -> DrawingArc Nothing (c, r, ds'.toolAngle, arcAngle') }
+
        otherwise ->
          case ds'.drawing of
            NotDrawing -> ds'
@@ -296,7 +300,9 @@ toolBottom len = rect len rulerBottomHeight
 
 displayTool : Point -> Angle -> Length -> Form
 displayTool c angle len = group [ toolTop len |> moveY 11
-                                , toolBottom len |> moveY -10 ]
+                                , toolBottom len |> moveY -10
+                                , circle 4 |> filled black
+                                , circle 4 |> filled black |> moveX len ]
                         |> move c
                         |> rotate angle
 
@@ -331,14 +337,6 @@ problem = let triangle = group
 displayProblem : Int -> Int -> Element
 displayProblem ww wh = collage ww wh [problem]
 
--- overall display
-displayWidth = 1371
-displayHeight = 660
-
-displayS : Signal Element
-displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
-           <~ (foldp update initialDrawState <| touchesR)
-
 -- touch analysis
 recenter : Int -> Int -> T.Touch -> NTouch
 recenter cx cy t = { x = toFloat <| t.x - cx,
@@ -363,5 +361,28 @@ touchesView : Signal Element
 touchesView = let viewTouches ts = collage displayWidth displayHeight
                                    <| map fingerSymbol ts
               in viewTouches <~ touchesR
+
+-- modes
+data Mode = Ruler | Draw
+
+port modeString : Signal String
+
+mode : Signal Mode
+mode = (\ms -> case ms of
+                 "ruler" -> Ruler
+                 "draw" -> Draw) <~ modeString
+
+-- merging
+data Action = Touches [NTouch] | ChangeMode Mode
+
+actions = merge (lift Touches touchesR) (lift ChangeMode mode)
+
+-- overall display
+displayWidth = 1371
+displayHeight = 660
+
+displayS : Signal Element
+displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
+           <~ (foldp update initialDrawState <| actions)
 
 main = (\x y -> layers [spacer displayWidth displayHeight |> color gray, x, y]) <~ touchesView ~ displayS
