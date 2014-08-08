@@ -59,8 +59,16 @@ displacement t = (t.x - t.x0, t.y - t.y0)
 angularDist : NTouch -> Angle
 angularDist t = atan2 (t.y - t.y0) (t.x - t.x0)
 
+bound lower val upper = max lower <| min upper val
+
+boundPoint : ((Float, Float), (Float, Float)) -> Point -> Point
+boundPoint ((minX, maxX), (minY, maxY)) (x, y) = (bound minX x maxX, bound minY y maxY)
+
 toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
+
+toToolAngle : Point -> Point -> Angle
+toToolAngle (sx, sy) (ex, ey) = snd <| toPolar (ex - sx, ey - sx)
 
 distToSegment p v w =
   let (px, py) = p
@@ -188,8 +196,10 @@ update ts ds =
   let gest = gesture ts ds
       ds' = { ds | gesture <- gest }
   in case gest of
-       Translate { p0, tp0, t } ->
-         { ds' | toolStart <- p0 `addv` ((t.x, t.y) `subv` tp0)}
+       Translate { p0, tp0, t } -> -- TODO optimize so we don't do all this bounding always
+         let toolStart' = boundPoint ((-displayWidth/2, displayWidth/2), (-displayHeight/2, displayHeight/2))
+                          <| p0 `addv` ((t.x, t.y) `subv` tp0)
+         in { ds' | toolStart <- Debug.log "ts" toolStart' }
 
        AdjustLength { l0, t2 } ->
          { ds' | toolLength <- l0 + (t2.x - t2.x0) * cos ds'.toolAngle +
@@ -202,7 +212,7 @@ update ts ds =
        DrawLine { t1, t2, p1 } ->
          let theta = angularDist t2 - ds.toolAngle
              r = (norm (displacement t2)) * cos theta
-             lineLength = min ds.toolLength <| max 0 r
+             lineLength = bound 0 r ds.toolLength
          in { ds' | drawing <- DrawingLine (p1,
                                             (fst p1 + lineLength*(cos ds.toolAngle),
                                              snd p1 + lineLength*(sin ds.toolAngle))) }
