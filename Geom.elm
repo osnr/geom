@@ -59,10 +59,10 @@ displacement t = (t.x - t.x0, t.y - t.y0)
 angularDist : NTouch -> Angle
 angularDist t = atan2 (t.y - t.y0) (t.x - t.x0)
 
-bound lower val upper = max lower <| min upper val
+bound (lower, upper) val = max lower <| min upper val
 
 boundPoint : ((Float, Float), (Float, Float)) -> Point -> Point
-boundPoint ((minX, maxX), (minY, maxY)) (x, y) = (bound minX x maxX, bound minY y maxY)
+boundPoint ((minX, maxX), (minY, maxY)) (x, y) = (bound (minX, maxX) x, bound (minY, maxY) y)
 
 toolEnd : Point -> Angle -> Length -> Point
 toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
@@ -199,20 +199,24 @@ update ts ds =
        Translate { p0, tp0, t } -> -- TODO optimize so we don't do all this bounding always
          let toolStart' = boundPoint ((-displayWidth/2, displayWidth/2), (-displayHeight/2, displayHeight/2))
                           <| p0 `addv` ((t.x, t.y) `subv` tp0)
-         in { ds' | toolStart <- Debug.log "ts" toolStart' }
+         in { ds' | toolStart <- toolStart' }
 
        AdjustLength { l0, t2 } ->
-         { ds' | toolLength <- l0 + (t2.x - t2.x0) * cos ds'.toolAngle +
-                                    (t2.y - t2.y0) * sin ds'.toolAngle }
+         let toolLength' = l0 + (t2.x - t2.x0) * cos ds'.toolAngle +
+                                (t2.y - t2.y0) * sin ds'.toolAngle
+         in { ds' | toolLength <- bound (0, displayWidth) toolLength' }
 
        Rotate { a0, t1, t2 } ->
-         let (tx, ty) = ds'.toolStart
-         in { ds' | toolAngle <- atan2 (t2.y - ty) (t2.x - tx) }
+         let (sx, sy) = ds'.toolStart
+             (ex', ey') = boundPoint ((-displayWidth/2, displayWidth/2),
+                                      (-displayHeight/2, displayHeight/2))
+                                     (t2.x, t2.y)
+         in { ds' | toolAngle <- atan2 (ey' - sy) (ex' - sx) }
 
        DrawLine { t1, t2, p1 } ->
          let theta = angularDist t2 - ds.toolAngle
              r = (norm (displacement t2)) * cos theta
-             lineLength = bound 0 r ds.toolLength
+             lineLength = bound (0, ds.toolLength) r
          in { ds' | drawing <- DrawingLine (p1,
                                             (fst p1 + lineLength*(cos ds.toolAngle),
                                              snd p1 + lineLength*(sin ds.toolAngle))) }
