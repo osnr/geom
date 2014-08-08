@@ -157,7 +157,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     -- pencil stuff
     (OneFingerOnePencil ofop, t2'::t1'::[]) ->
       if t1'.id == ofop.t1.id && t2'.id == ofop.t2.id
-        then if norm (displacement t2') > 100
+        then if norm (displacement t2') > 50
                then startFingerPencilGesture t1' t2' ds
                else OneFingerOnePencil { ofop | t1 <- t1', t2 <- t2' }
         else NoTouches
@@ -207,7 +207,9 @@ update ts ds =
                                             (fst p1 + lineLength*(cos ds.toolAngle),
                                              snd p1 + lineLength*(sin ds.toolAngle))) }
        DrawArc { t1, t2, c, r } ->
-         { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle, angularDist t2) }
+         let (tx, ty) = ds'.toolStart
+         in { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle,
+                                           atan2 (t2.y - ty) (t2.x - tx)) }
 
        otherwise ->
          case ds'.drawing of
