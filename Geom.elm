@@ -277,7 +277,8 @@ toolBottom len = rect len rulerBottomHeight
 
 displayTool : Point -> Angle -> Length -> Form
 displayTool c angle len = group [ toolTop len |> moveY 11
-                                , toolBottom len |> moveY -10 ]
+                                , toolBottom len |> moveY -10
+                                , circle 4 |> filled black ]
                         |> move c
                         |> rotate angle
 
