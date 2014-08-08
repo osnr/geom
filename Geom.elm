@@ -241,7 +241,7 @@ update ts ds =
                                          in remd * 2 * pi) <| -- bound it
                                   case counter of
                                     Nothing -> arcAngle'
-                                    Just oldAngle -> oldAngle
+                                    Just oldAngle -> oldAngle + pi + arcAngle'
                                  )
                  _ -> DrawingArc Nothing (c, r, ds'.toolAngle, arcAngle') }
        otherwise ->
