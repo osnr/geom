@@ -128,19 +128,21 @@ gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
     (NoTouches, t::[]) ->
-      if | dist (t.x, t.y) ds.toolStart < 200 ->
-             case ds.mode of
-               Ruler -> Translate { p0 = ds.toolStart
-                                  , tp0 = (t.x, t.y)
-                                  , t = t }
-               _     -> NoTouches
+      let tsDist = dist (t.x, t.y) ds.toolStart
+          teDist = dist (t.x, t.y) (toolEnd ds.toolStart ds.toolAngle ds.toolLength)
+      in if | tsDist < teDist && tsDist < 200 ->
+              case ds.mode of
+                Ruler -> Translate { p0 = ds.toolStart
+                                   , tp0 = (t.x, t.y)
+                                   , t = t }
+                _     -> NoTouches
 
-         | dist (t.x, t.y) (toolEnd ds.toolStart ds.toolAngle ds.toolLength) < 200 ->
-             case ds.mode of
-               Ruler -> TouchEnd { t = t }
-               Draw  -> PencilEnd { t = t }
+            | teDist <= tsDist && teDist < 200 ->
+              case ds.mode of
+                Ruler -> TouchEnd { t = t }
+                Draw  -> PencilEnd { t = t }
 
-         | otherwise -> NoTouches
+            | otherwise -> NoTouches
 
     (Translate trans, t'::[]) ->
       if t'.id == trans.t.id
@@ -151,7 +153,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     (TouchEnd ep, t'::[]) ->
       -- dispatch only if the distance t2 has moved is big enough
       if t'.id == ep.t.id
-        then if norm (displacement t') > 50
+        then if norm (displacement t') > 20
                then startEndGesture t' ds
                else TouchEnd { ep | t <- t' }
         else NoTouches
@@ -169,7 +171,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     -- pencil stuff
     (PencilEnd de, t'::[]) ->
       if t'.id == de.t.id
-        then if norm (displacement t') > 50
+        then if norm (displacement t') > 20
                then startPencilEndGesture t' ds
                else PencilEnd { de | t <- t' }
         else NoTouches
