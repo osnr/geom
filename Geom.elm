@@ -221,10 +221,18 @@ update ts ds =
                                             (fst p1 + lineLength*(cos ds.toolAngle),
                                              snd p1 + lineLength*(sin ds.toolAngle))) }
        DrawArc { t1, t2, c, r } ->
-         let (tx, ty) = ds'.toolStart
-         in { ds' | drawing <- DrawingArc (c, r, ds'.toolAngle,
-                                           atan2 (t2.y - ty) (t2.x - tx)) }
-
+         let (sx, sy) = ds'.toolStart
+             arcAngle' = atan2 (t2.y - sy) (t2.x - sx)
+         in { ds' | drawing <-
+               case ds'.drawing of
+                 DrawingArc (_, _, _, arcAngle) ->
+                   DrawingArc (c, r, ds'.toolAngle,
+                                bound (-2*pi, 2*pi) <|
+                                if abs (arcAngle - arcAngle') > pi
+                                  then -arcAngle' + 2*pi
+                                  else arcAngle'
+                              )
+                 _ -> DrawingArc (c, r, ds'.toolAngle, arcAngle') }
        otherwise ->
          case ds'.drawing of
            NotDrawing -> ds'
