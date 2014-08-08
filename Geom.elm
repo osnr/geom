@@ -128,14 +128,14 @@ gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
     (NoTouches, t::[]) ->
-      if | dist (t.x, t.y) ds.toolStart < 50 ->
+      if | dist (t.x, t.y) ds.toolStart < 200 ->
              case ds.mode of
                Ruler -> Translate { p0 = ds.toolStart
                                   , tp0 = (t.x, t.y)
                                   , t = t }
                _     -> NoTouches
 
-         | dist (t.x, t.y) (toolEnd ds.toolStart ds.toolAngle ds.toolLength) < 50 ->
+         | dist (t.x, t.y) (toolEnd ds.toolStart ds.toolAngle ds.toolLength) < 200 ->
              case ds.mode of
                Ruler -> TouchEnd { t = t }
                Draw  -> PencilEnd { t = t }
