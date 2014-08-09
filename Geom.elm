@@ -153,7 +153,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     (TouchEnd ep, t'::[]) ->
       -- dispatch only if the distance t2 has moved is big enough
       if t'.id == ep.t.id
-        then if norm (displacement t') > 20
+        then if norm (displacement t') > 5
                then startEndGesture t' ds
                else TouchEnd { ep | t <- t' }
         else NoTouches
@@ -171,7 +171,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     -- pencil stuff
     (PencilEnd de, t'::[]) ->
       if t'.id == de.t.id
-        then if norm (displacement t') > 20
+        then if norm (displacement t') > 5
                then startPencilEndGesture t' ds
                else PencilEnd { de | t <- t' }
         else NoTouches
@@ -229,23 +229,20 @@ touchesUpdate ts ds =
          in { ds' | drawing <-
                case ds'.drawing of
                  DrawingArc counter (_, _, _, arcAngle) ->
-                   let counter' =
+                   let counter1 =
                        case counter of
                          Nothing -> if abs (arcAngle - arcAngle') > pi
                                     then Just arcAngle
                                     else Nothing
                          Just oldAngle -> if abs (oldAngle - arcAngle') > pi
-                                          then Just oldAngle
+                                          then Just (2*pi + arcAngle')
                                           else Nothing
-                   in DrawingArc counter'
-                                 (c, r, ds'.toolAngle,
-                                  (\a -> let quot = a / (2 * pi)
-                                             remd = quot - toFloat (truncate quot)
-                                         in remd * 2 * pi) <| -- bound it
-                                  case counter of
-                                    Nothing -> arcAngle'
-                                    Just oldAngle -> oldAngle + pi + arcAngle'
-                                 )
+                   in DrawingArc counter1 <|
+                                 case counter1 of
+                                   Nothing ->
+                                     (c, r, ds'.toolAngle, arcAngle')
+                                   Just oldAngle ->
+                                     (c, r, ds'.toolAngle, min (2*pi + arcAngle') (2*pi))
                  _ -> DrawingArc Nothing (c, r, ds'.toolAngle, arcAngle') }
 
        otherwise ->
@@ -266,7 +263,7 @@ rulerBottomHeight = 20
 {-| An elliptical arc with the given center, radii and angle interval. -}
 arc : (Float, Float) -> (Float, Float) -> (Float, Float) -> Shape
 arc (cx, cy) (a, b) (startAngle, endAngle) =
-  let n = 50
+  let n = 720
       t = (endAngle - startAngle) / n
       f i = (cx + a * cos (t*i + startAngle), cy + b * sin (t*i + startAngle))
   in map f [0..n-1]
