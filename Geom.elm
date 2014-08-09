@@ -108,7 +108,7 @@ insideRuler ds {x, y} =
 isTouchParallel : Angle -> NTouch -> Bool
 isTouchParallel toolAngle t =
   let theta = angularDist t - toolAngle
-  in (theta < degrees 45 && theta > degrees -45) || (theta > degrees 135 || theta < degrees -135)
+  in abs (cos theta) > abs (sin theta)
 
 startEndGesture : NTouch -> DrawState -> Gesture
 startEndGesture t ds =
