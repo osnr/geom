@@ -32,11 +32,11 @@ data Drawing = NotDrawing | DrawingLine Line | DrawingArc (Maybe Angle) Arc
 
 data Gesture = NoTouches
 
-             | Translate { p0:Point, tp0:Point, t:NTouch }
+             | Translate { toolP0:Point, touchP0:Point, t:NTouch }
 
              | TouchEnd { t:NTouch } -- before we've figured out which one
              | AdjustLength { l0:Length, t:NTouch }
-             | Rotate { a0:Angle, t:NTouch }
+             | Rotate { angleOffset0:Angle, t:NTouch }
 
              | PencilEnd { t:NTouch } -- before we've figured out which one
              | DrawLine { t:NTouch, p1:Point }
@@ -113,16 +113,17 @@ isTouchParallel toolAngle t =
   let theta = angularDist t - toolAngle
   in abs (cos theta) > abs (sin theta)
 
-startEndGesture : NTouch -> DrawState -> Gesture
-startEndGesture t ds =
+initEndGesture : NTouch -> DrawState -> Gesture
+initEndGesture t ds =
   if isTouchParallel ds.toolAngle t
     then AdjustLength { l0 = ds.toolLength, t = t } -- pulling left or right
-    else Rotate { a0 = ds.toolAngle, t = t }
+    else let (sx, sy) = ds.toolStart
+         in Rotate { angleOffset0 = ds.toolAngle - atan2 (t.y - sy) (t.x - sx), t = t }
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to draw a line or an arc
-startPencilEndGesture : NTouch -> DrawState -> Gesture
-startPencilEndGesture t ds =
+initPencilEndGesture : NTouch -> DrawState -> Gesture
+initPencilEndGesture t ds =
   if isTouchParallel ds.toolAngle t
     then DrawLine { t = t, p1 = ds.toolStart }
     else DrawArc { t = t, c = ds.toolStart, r = ds.toolLength }
@@ -143,8 +144,8 @@ gesture ts ds = -- Debug.log "gesture state" <|
       onStartOrEnd ds (t.x, t.y)
         (\_ ->
            case ds.mode of
-             Ruler -> Translate { p0 = ds.toolStart
-                                , tp0 = (t.x, t.y)
+             Ruler -> Translate { toolP0 = ds.toolStart
+                                , touchP0 = (t.x, t.y)
                                 , t = t }
              _     -> NoTouches)
 
@@ -165,7 +166,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
       -- dispatch only if the distance t2 has moved is big enough
       if t'.id == ep.t.id
         then if norm (displacement t') > 5
-               then startEndGesture t' ds
+               then initEndGesture t' ds
                else TouchEnd { ep | t <- t' }
         else NoTouches
 
@@ -183,7 +184,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
     (PencilEnd de, t'::[]) ->
       if t'.id == de.t.id
         then if norm (displacement t') > 5
-               then startPencilEndGesture t' ds
+               then initPencilEndGesture t' ds
                else PencilEnd { de | t <- t' }
         else NoTouches
 
@@ -217,9 +218,9 @@ touchesUpdate ts ds =
   let gest = gesture ts ds
       ds' = { ds | gesture <- gest }
   in case gest of
-       Translate { p0, tp0, t } -> -- TODO optimize so we don't do all this bounding always
+       Translate { toolP0, touchP0, t } -> -- TODO optimize so we don't do all this bounding always
          let toolStart' = boundPoint ((-displayWidth/2, displayWidth/2), (-displayHeight/2, displayHeight/2))
-                          <| p0 `addv` ((t.x, t.y) `subv` tp0)
+                          <| toolP0 `addv` ((t.x, t.y) `subv` touchP0)
          in { ds' | toolStart <- toolStart' }
 
        AdjustLength { l0, t } ->
@@ -227,12 +228,13 @@ touchesUpdate ts ds =
                                 (t.y - t.y0) * sin ds'.toolAngle
          in { ds' | toolLength <- bound (0, displayWidth) toolLength' }
 
-       Rotate { a0, t } ->
+       Rotate { angleOffset0, t } ->
          let (sx, sy) = ds'.toolStart
              (ex', ey') = boundPoint ((-displayWidth/2, displayWidth/2),
                                       (-displayHeight/2, displayHeight/2))
                                      (t.x, t.y)
-         in { ds' | toolAngle <- atan2 (ey' - sy) (ex' - sx) }
+             touchAngle = atan2 (ey' - sy) (ex' - sx) -- new angle of touch relative to toolStart
+         in { ds' | toolAngle <- angleOffset0 + touchAngle }
 
        DrawLine { t, p1 } ->
          let theta = angularDist t - ds.toolAngle
