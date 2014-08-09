@@ -10,6 +10,7 @@ type NTouch = { x:Float, y:Float, id:Int, x0:Float, y0:Float, t0:Time }
 
 type DrawState = { lines : [Line]
                  , arcs : [Arc]
+                 , points : [Point]
 
                  , toolStart : Point
                  , toolAngle : Angle
@@ -45,6 +46,8 @@ data Gesture = NoTouches
 initialDrawState : DrawState
 initialDrawState = { lines = []
                    , arcs = []
+                   , points = []
+
                    , toolStart = (0, 0)
                    , toolAngle = 0
                    , toolLength = 300
@@ -99,7 +102,7 @@ insideRuler ds {x, y} =
   let start = ds.toolStart
       end = toolEnd start ds.toolAngle ds.toolLength
 
-      distToRuler = Debug.log "distToRuler" <| distToSegment (x, y) start end
+      distToRuler = distToSegment (x, y) start end
   in distToRuler < 50
 
 -- used to determine whether we're lengthening ruler / drawing a line
@@ -124,25 +127,33 @@ startPencilEndGesture t ds =
     then DrawLine { t = t, p1 = ds.toolStart }
     else DrawArc { t = t, c = ds.toolStart, r = ds.toolLength }
 
+onStartOrEnd : DrawState -> Point -> (Point -> a) -> (Point -> a) -> (() -> a) -> a
+onStartOrEnd ds p onStart onEnd onNeither =
+  let sDist = dist p ds.toolStart
+      end   = toolEnd ds.toolStart ds.toolAngle ds.toolLength
+      eDist = dist p end
+  in if | sDist < eDist && sDist < 200  -> onStart ds.toolStart
+        | eDist <= sDist && eDist < 200 -> onEnd end
+        | otherwise                     -> onNeither ()
+
 gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
     (NoTouches, t::[]) ->
-      let tsDist = dist (t.x, t.y) ds.toolStart
-          teDist = dist (t.x, t.y) (toolEnd ds.toolStart ds.toolAngle ds.toolLength)
-      in if | tsDist < teDist && tsDist < 200 ->
-              case ds.mode of
-                Ruler -> Translate { p0 = ds.toolStart
-                                   , tp0 = (t.x, t.y)
-                                   , t = t }
-                _     -> NoTouches
+      onStartOrEnd ds (t.x, t.y)
+        (\_ ->
+           case ds.mode of
+             Ruler -> Translate { p0 = ds.toolStart
+                                , tp0 = (t.x, t.y)
+                                , t = t }
+             _     -> NoTouches)
 
-            | teDist <= tsDist && teDist < 200 ->
-              case ds.mode of
-                Ruler -> TouchEnd { t = t }
-                Draw  -> PencilEnd { t = t }
+        (\_ ->
+           case ds.mode of
+             Ruler -> TouchEnd { t = t }
+             Draw  -> PencilEnd { t = t })
 
-            | otherwise -> NoTouches
+        (\_ -> NoTouches)
 
     (Translate trans, t'::[]) ->
       if t'.id == trans.t.id
@@ -190,8 +201,16 @@ gesture ts ds = -- Debug.log "gesture state" <|
 
 update : Action -> DrawState -> DrawState
 update a ds = case a of
-                Touches ts -> touchesUpdate ts ds
+                Touches ts   -> touchesUpdate ts ds
                 ChangeMode m -> { ds | mode <- m }
+                Tap p        -> tapUpdate p ds
+
+tapUpdate : Point -> DrawState -> DrawState
+tapUpdate p ds =
+    onStartOrEnd ds p
+      (\_   -> { ds | points <- ds.toolStart :: ds.points })
+      (\end -> { ds | points <- end :: ds.points })
+      (\_   -> ds)
 
 touchesUpdate : [NTouch] -> DrawState -> DrawState
 touchesUpdate ts ds =
@@ -298,13 +317,13 @@ toolBottom len = rect len rulerBottomHeight
 displayTool : Point -> Angle -> Length -> Form
 displayTool c angle len = group [ toolTop len |> moveY 11
                                 , toolBottom len |> moveY -10
-                                , circle 4 |> filled black
-                                , circle 4 |> filled black |> moveX len ]
+                                , circle 4 |> filled (rgba 255 0 0 0.5)
+                                , circle 4 |> filled (rgba 0 255 0 0.5) |> moveX len ]
                         |> move c
                         |> rotate angle
 
 display : Int -> Int -> DrawState -> Element
-display ww wh { lines, arcs, toolStart, toolAngle, toolLength, drawing } =
+display ww wh { lines, arcs, points, toolStart, toolAngle, toolLength, drawing } =
         let linesForms = map (traced defaultLine . uncurry segment)
                          <| case drawing of
                               NotDrawing -> lines
@@ -315,7 +334,8 @@ display ww wh { lines, arcs, toolStart, toolAngle, toolLength, drawing } =
                             NotDrawing -> arcs
                             DrawingLine _ -> arcs
                             DrawingArc _ a -> a :: arcs
-        in collage ww wh <| linesForms ++ arcForms ++ [displayTool toolStart toolAngle toolLength]
+            pointForms = map (\p -> move p <| filled black <| circle 5) points
+        in collage ww wh <| pointForms ++ linesForms ++ arcForms ++ [displayTool toolStart toolAngle toolLength]
 
 -- problem display
 problem : Form
@@ -369,10 +389,20 @@ mode = (\ms -> case ms of
                  "ruler" -> Ruler
                  "draw" -> Draw) <~ modeString
 
--- merging
-data Action = Touches [NTouch] | ChangeMode Mode
+-- taps
+tapsR : Signal Point
+tapsR =
+  let cx = displayWidth `div` 2
+      cy = displayHeight `div` 2
+  in (\t -> (toFloat (t.x - cx), toFloat (-t.y + cy))) <~ T.taps
 
-actions = merge (lift Touches touchesR) (lift ChangeMode mode)
+-- merging
+data Action = Touches [NTouch] | Tap Point | ChangeMode Mode
+
+actions : Signal Action
+actions = merges [ lift Tap tapsR
+                 , lift Touches touchesR
+                 , lift ChangeMode mode ]
 
 -- overall display
 displayWidth = 1371
