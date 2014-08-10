@@ -43,12 +43,12 @@
             var geom = Elm.fullscreen(Elm.Main, { modeString: "ruler" });
             var ruler = document.getElementById("ruler");
             var draw = document.getElementById("draw");
-            ruler.ontouchstart = function() {
+            ruler.ontouchstart = ruler.onclick = function() {
                 ruler.className = "selected";
                 draw.className = "";
                 geom.ports.modeString.send("ruler");
             };
-            draw.ontouchstart = function() {
+            draw.ontouchstart = draw.onclick = function() {
                 draw.className = "selected";
                 ruler.className = ""
                 geom.ports.modeString.send("draw");
