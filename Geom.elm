@@ -233,7 +233,9 @@ erase ds p =
                        iPoints
 
         erasers = lineErasers ++ arcErasers ++ pointErasers
-    in fst (head (sortBy snd erasers)) <| ds
+    in case sortBy snd erasers of
+         (eraser, _) :: _ -> eraser ds
+         []               -> ds
 
 tapUpdate : Point -> DrawState -> DrawState
 tapUpdate p ds =
