@@ -35,23 +35,33 @@
         </script>
 
         <div style="position: fixed; height: 300px; width: 100px; top: 0; right: 0; z-index: 10;">
-            <button class="selected" style="width: 100%; height: 50%" id="ruler">Ruler</button>
-            <button style="width: 100%; height: 50%" id="draw">Draw</button>
+            <button class="selected" style="width: 100%; height: 33%" id="ruler">Ruler</button>
+            <button style="width: 100%; height: 33%" id="draw">Draw</button>
+            <button style="width: 100%; height: 33%" id="erase">Erase</button>
         </div>
 
         <script>
             var geom = Elm.fullscreen(Elm.Main, { modeString: "ruler" });
             var ruler = document.getElementById("ruler");
             var draw = document.getElementById("draw");
+            var erase = document.getElementById("erase");
             ruler.ontouchstart = ruler.onclick = function() {
                 ruler.className = "selected";
                 draw.className = "";
+                erase.className = "";
                 geom.ports.modeString.send("ruler");
             };
             draw.ontouchstart = draw.onclick = function() {
                 draw.className = "selected";
                 ruler.className = ""
+                erase.className = ""
                 geom.ports.modeString.send("draw");
+            };
+            erase.ontouchstart = erase.onclick = function() {
+                erase.className = "selected";
+                ruler.className = ""
+                draw.className = ""
+                geom.ports.modeString.send("erase");
             };
         </script>
     </body>

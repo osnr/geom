@@ -152,7 +152,8 @@ gesture ts ds = -- Debug.log "gesture state" <|
         (\_ ->
            case ds.mode of
              Ruler -> TouchEnd { t = t }
-             Draw  -> PencilEnd { t = t })
+             Draw  -> PencilEnd { t = t }
+             _     -> NoTouches)
 
         (\_ -> NoTouches)
 
@@ -206,12 +207,45 @@ update a ds = case a of
                 ChangeMode m -> { ds | mode <- m }
                 Tap p        -> tapUpdate p ds
 
+removeIndex : Int -> [(Int, a)] -> [a]
+removeIndex i ixs = snd <| unzip <| filter (\(i', _) -> i' /= i) ixs
+
+erase : DrawState -> Point -> DrawState
+erase ds p =
+    let iLines = zip [0..length ds.lines] ds.lines
+        lineErasers = map (\(i, (p1, p2)) ->
+                               ( (\ds -> { ds | lines <- removeIndex i iLines })
+                               , min (dist p1 p) (dist p2 p)))
+                      iLines
+        iArcs = zip [0..length ds.arcs] ds.arcs
+        arcErasers = map (\(i, ((cx, cy), r, a1, a2)) ->
+                              let p1 = ( cx + r * cos a1
+                                       , cy + r * sin a1 )
+                                  p2 = ( cx + r * cos a2
+                                       , cy + r * sin a2 )
+                              in ( (\ds -> { ds | arcs <- removeIndex i iArcs })
+                                 , min (dist p1 p) (dist p2 p) ))
+                     iArcs
+        iPoints = zip [0..length ds.points] ds.points
+        pointErasers = map (\(i, p') ->
+                                ( (\ds -> { ds | points <- removeIndex i iPoints })
+                                , dist p' p ))
+                       iPoints
+
+        erasers = lineErasers ++ arcErasers ++ pointErasers
+    in fst (head (sortBy snd erasers)) <| ds
+
 tapUpdate : Point -> DrawState -> DrawState
 tapUpdate p ds =
-    onStartOrEnd ds p
-      (\_   -> { ds | points <- ds.toolStart :: ds.points })
-      (\end -> { ds | points <- end :: ds.points })
-      (\_   -> ds)
+    case ds.mode of
+      Draw ->
+          onStartOrEnd ds p
+            (\_   -> { ds | points <- ds.toolStart :: ds.points })
+            (\end -> { ds | points <- end :: ds.points })
+            (\_   -> ds)
+      Erase ->
+          erase ds p
+      Ruler -> ds
 
 touchesUpdate : [NTouch] -> DrawState -> DrawState
 touchesUpdate ts ds =
@@ -382,14 +416,15 @@ touchesView = let viewTouches ts = collage displayWidth displayHeight
               in viewTouches <~ touchesR
 
 -- modes
-data Mode = Ruler | Draw
+data Mode = Ruler | Draw | Erase
 
 port modeString : Signal String
 
 mode : Signal Mode
 mode = (\ms -> case ms of
                  "ruler" -> Ruler
-                 "draw" -> Draw) <~ modeString
+                 "draw" -> Draw
+                 "erase" -> Erase) <~ modeString
 
 -- taps
 tapsR : Signal Point
