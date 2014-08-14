@@ -232,7 +232,7 @@ erase ds p =
                                 , dist p' p ))
                        iPoints
 
-        erasers = lineErasers ++ arcErasers ++ pointErasers
+        erasers = pointErasers ++ arcErasers ++ lineErasers
     in case sortBy snd erasers of
          (eraser, _) :: _ -> eraser ds
          []               -> ds
@@ -245,8 +245,7 @@ tapUpdate p ds =
             (\_   -> { ds | points <- ds.toolStart :: ds.points })
             (\end -> { ds | points <- end :: ds.points })
             (\_   -> ds)
-      Erase ->
-          erase ds p
+      Erase -> erase ds p
       Ruler -> ds
 
 touchesUpdate : [NTouch] -> DrawState -> DrawState
@@ -295,15 +294,17 @@ touchesUpdate ts ds =
                          Nothing -> if abs (arcAngle - arcAngle') > pi
                                     then Just arcAngle
                                     else Nothing
-                         Just oldAngle -> if abs (oldAngle - arcAngle') > pi
-                                          then Just (2*pi + arcAngle')
-                                          else Nothing
+                         Just oldAngle ->
+                             let gap = oldAngle - arcAngle'
+                             in if | gap > pi  -> Just (2*pi + arcAngle')
+                                   | gap < -pi -> Just (arcAngle' - 2*pi)
+                                   | otherwise -> Nothing
                    in DrawingArc counter1 <|
                                  case counter1 of
                                    Nothing ->
                                      (c, r, ds'.toolAngle, arcAngle')
                                    Just oldAngle ->
-                                     (c, r, ds'.toolAngle, min (2*pi + arcAngle') (2*pi))
+                                     (c, r, ds'.toolAngle, oldAngle)
                  _ -> DrawingArc Nothing (c, r, ds'.toolAngle, arcAngle') }
 
        otherwise ->
