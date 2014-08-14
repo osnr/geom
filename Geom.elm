@@ -264,11 +264,15 @@ touchesUpdate ts ds =
 
        Rotate { angleOffset0, t } ->
          let (sx, sy) = ds'.toolStart
-             (ex', ey') = boundPoint ((-displayWidth/2, displayWidth/2),
-                                      (-displayHeight/2, displayHeight/2))
-                                     (t.x, t.y)
-             touchAngle = atan2 (ey' - sy) (ex' - sx) -- new angle of touch relative to toolStart
-         in { ds' | toolAngle <- angleOffset0 + touchAngle }
+             touchAngle = atan2 (t.y - sy) (t.x - sx)
+             toolAngle' = angleOffset0 + touchAngle
+             (ex', ey') = ( sx + ds.toolLength * cos toolAngle'
+                          , sy + ds.toolLength * sin toolAngle' )
+             (ex'', ey'') = boundPoint ((-displayWidth/2, displayWidth/2),
+                                        (-displayHeight/2, displayHeight/2))
+                                       (ex', ey')
+             toolAngle'' = atan2 (ey'' - sy) (ex'' - sx)
+         in { ds' | toolAngle <- toolAngle'' }
 
        DrawLine { t, p1 } ->
          let theta = angularDist t - ds.toolAngle
