@@ -2,9 +2,8 @@ import Dict
 import Text
 import Keyboard
 import Debug
+import Window
 import Touch as T
-
-import Graphics.Input as I
 
 type NTouch = { x:Float, y:Float, id:Int, x0:Float, y0:Float, t0:Time }
 
@@ -16,6 +15,8 @@ type DrawState = { lines : [Line]
                  , toolAngle : Angle
                  , toolLength : Length
 
+                 , displayWidth : Float
+                 , displayHeight : Float
                  , mode : Mode
 
                  , gesture : Gesture
@@ -52,6 +53,8 @@ initialDrawState = { lines = []
                    , toolAngle = 0
                    , toolLength = 300
 
+                   , displayWidth = 800
+                   , displayHeight = 600
                    , mode = Ruler -- kind of annoying that this is duplicated
 
                    , gesture = NoTouches
@@ -203,9 +206,10 @@ gesture ts ds = -- Debug.log "gesture state" <|
 
 update : Action -> DrawState -> DrawState
 update a ds = case a of
-                Touches ts   -> touchesUpdate ts ds
-                ChangeMode m -> { ds | mode <- m }
-                Tap p        -> tapUpdate p ds
+                Touches ts      -> touchesUpdate ts ds
+                ChangeMode m    -> { ds | mode <- m }
+                Tap p           -> tapUpdate p ds
+                Resize (dw, dh) -> Debug.log "hi" { ds | displayWidth <- toFloat dw, displayHeight <- toFloat dh }
 
 removeIndex : Int -> [(Int, a)] -> [a]
 removeIndex i ixs = snd <| unzip <| filter (\(i', _) -> i' /= i) ixs
@@ -254,14 +258,14 @@ touchesUpdate ts ds =
       ds' = { ds | gesture <- gest }
   in case gest of
        Translate { toolP0, touchP0, t } -> -- TODO optimize so we don't do all this bounding always
-         let toolStart' = boundPoint ((-displayWidth/2, displayWidth/2), (-displayHeight/2, displayHeight/2))
+         let toolStart' = boundPoint ((-ds.displayWidth/2, ds.displayWidth/2), (-ds.displayHeight/2, ds.displayHeight/2))
                           <| toolP0 `addv` ((t.x, t.y) `subv` touchP0)
          in { ds' | toolStart <- toolStart' }
 
        AdjustLength { l0, t } ->
          let toolLength' = l0 + (t.x - t.x0) * cos ds'.toolAngle +
                                 (t.y - t.y0) * sin ds'.toolAngle
-         in { ds' | toolLength <- bound (0, displayWidth) toolLength' }
+         in { ds' | toolLength <- bound (0, ds.displayWidth) toolLength' }
 
        Rotate { angleOffset0, t } ->
          let (sx, sy) = ds'.toolStart
@@ -269,8 +273,8 @@ touchesUpdate ts ds =
              toolAngle' = angleOffset0 + touchAngle
              (ex', ey') = ( sx + ds.toolLength * cos toolAngle'
                           , sy + ds.toolLength * sin toolAngle' )
-             (ex'', ey'') = boundPoint ((-displayWidth/2, displayWidth/2),
-                                        (-displayHeight/2, displayHeight/2))
+             (ex'', ey'') = boundPoint ((-ds.displayWidth/2, ds.displayWidth/2),
+                                        (-ds.displayHeight/2, ds.displayHeight/2))
                                        (ex', ey')
              toolAngle'' = atan2 (ey'' - sy) (ex'' - sx)
          in { ds' | toolAngle <- toolAngle'' }
@@ -365,8 +369,9 @@ displayTool c angle len = group [ toolTop len |> moveY 11
                         |> move c
                         |> rotate angle
 
-display : Int -> Int -> DrawState -> Element
-display ww wh { lines, arcs, points, toolStart, toolAngle, toolLength, drawing } =
+display : DrawState -> Element
+display { displayWidth, displayHeight,
+          lines, arcs, points, toolStart, toolAngle, toolLength, drawing } =
         let linesForms = map (traced defaultLine . uncurry segment)
                          <| case drawing of
                               NotDrawing -> lines
@@ -378,7 +383,8 @@ display ww wh { lines, arcs, points, toolStart, toolAngle, toolLength, drawing }
                             DrawingLine _ -> arcs
                             DrawingArc _ a -> a :: arcs
             pointForms = map (\p -> move p <| filled black <| circle 5) points
-        in collage ww wh <| pointForms ++ linesForms ++ arcForms ++ [displayTool toolStart toolAngle toolLength]
+        in collage (ceiling displayWidth) (ceiling displayHeight)
+           <| pointForms ++ linesForms ++ arcForms ++ [displayTool toolStart toolAngle toolLength]
 
 -- problem display
 problem : Form
@@ -394,8 +400,8 @@ problem = let triangle = group
           in moveY 100
              <| group [triangle, labels]
 
-displayProblem : Int -> Int -> Element
-displayProblem ww wh = collage ww wh [problem]
+displayProblem : Float -> Float -> Element
+displayProblem ww wh = collage (ceiling ww) (ceiling wh) [problem]
 
 -- touch analysis
 recenter : Int -> Int -> T.Touch -> NTouch
@@ -407,10 +413,10 @@ recenter cx cy t = { x = toFloat <| t.x - cx,
                      t0 = t.t0 }
 
 touchesR : Signal [NTouch]
-touchesR = let recenterAndResortAll ts =
-                 let (cx, cy) = (displayWidth `div` 2, displayHeight `div` 2)
-                 in map (recenter cx cy) <| sortBy ((\x -> -x) . .t0) ts
-           in recenterAndResortAll <~ T.touches
+touchesR = let recenterAndResortAll (dw, dh) ts =
+                   let (cx, cy) = (dw `div` 2, dh `div` 2)
+                   in map (recenter cx cy) <| sortBy ((\x -> -x) . .t0) ts
+           in recenterAndResortAll <~ Window.dimensions ~ T.touches
 
 fingerSymbol : NTouch -> Form
 fingerSymbol {x, y} = circle 50
@@ -418,9 +424,9 @@ fingerSymbol {x, y} = circle 50
                     |> move (x, y)
 
 touchesView : Signal Element
-touchesView = let viewTouches ts = collage displayWidth displayHeight
-                                   <| map fingerSymbol ts
-              in viewTouches <~ touchesR
+touchesView = let viewTouches (dw, dh) ts = collage dw dh
+                                         <| map fingerSymbol ts
+              in viewTouches <~ Window.dimensions ~ touchesR
 
 -- modes
 data Mode = Ruler | Draw | Erase
@@ -441,11 +447,19 @@ tapsR =
   in (\t -> (toFloat (t.x - cx), toFloat (-t.y + cy))) <~ T.taps
 
 -- merging
-data Action = Touches [NTouch] | Tap Point | ChangeMode Mode
+data Action = Touches [NTouch] | Tap Point | ChangeMode Mode | Resize (Int, Int)
+
+-- this is a hack: https://groups.google.com/d/topic/elm-discuss/pevppMaHyyA/discussion
+-- and https://groups.google.com/d/topic/elm-discuss/X4wmckEtMyg/discussion
+port initialDimensions : Signal (Int, Int)
+
+withInitialDimensions : Signal (Int, Int)
+withInitialDimensions = merge Window.dimensions initialDimensions
 
 actions : Signal Action
-actions = merges [ lift Tap tapsR
-                 , lift Touches touchesR
+actions = merges [ lift Resize withInitialDimensions
+                 , lift Tap tapsR
+                 , lift Touches touchesR 
                  , lift ChangeMode mode ]
 
 -- overall display
@@ -453,7 +467,8 @@ displayWidth = 1371
 displayHeight = 660
 
 displayS : Signal Element
-displayS = (\ds -> layers [displayProblem displayWidth displayHeight, display displayWidth displayHeight ds])
+displayS = (\ds -> layers [ displayProblem ds.displayWidth ds.displayHeight
+                          , display ds ])
            <~ (foldp update initialDrawState <| actions)
 
-main = (\x y -> layers [spacer displayWidth displayHeight |> color gray, x, y]) <~ touchesView ~ displayS
+main = (\(dw, dh) x y -> layers [spacer dw dh |> color gray, x, y]) <~ Window.dimensions ~ touchesView ~ displayS

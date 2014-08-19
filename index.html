@@ -41,7 +41,10 @@
         </div>
 
         <script>
-            var geom = Elm.fullscreen(Elm.Main, { modeString: "ruler" });
+            var geom = Elm.fullscreen(Elm.Main, { initialDimensions: [800, 600], modeString: "ruler" });
+
+            geom.ports.initialDimensions.send([window.innerWidth, window.innerHeight]);
+
             var ruler = document.getElementById("ruler");
             var draw = document.getElementById("draw");
             var erase = document.getElementById("erase");
