@@ -23,10 +23,12 @@ displayS = (\ds -> layers [ Problem.displayProblem ds.displayWidth ds.displayHei
                           , DS.display ds ])
            <~ DS.drawStateS actions
 
-main = (\(dw, dh) tv disp -> layers [ spacer dw dh |> color gray
-                                    , tv
-                                    , disp
-                                    , container dw dh topRight Mode.modeButtons ])
+main = (\(dw, dh) tv disp modeBtns ->
+            layers [ spacer dw dh |> color gray
+                   , tv
+                   , disp
+                   , container dw dh topRight modeBtns ])
        <~ Window.dimensions
         ~ Touches.touchesView
         ~ displayS
+        ~ Mode.modeButtonsS

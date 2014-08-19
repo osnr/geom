@@ -1,6 +1,7 @@
 module Touches where
 
 import Touch as T
+import Mode
 import Window
 import Types (NTouch, Point)
 
@@ -12,10 +13,16 @@ recenter cx cy t = { x = toFloat <| t.x - cx,
                      id = t.id,
                      t0 = t.t0 }
 
+isModeSwitch : (Int, Int) -> (Int, Int) -> Bool
+isModeSwitch (dw, dh) (x, y) = x > dw - Mode.boxWidth &&
+                               y < Mode.boxHeight
+
 touchesR : Signal [NTouch]
 touchesR = let recenterAndResortAll (dw, dh) ts =
                    let (cx, cy) = (dw `div` 2, dh `div` 2)
-                   in map (recenter cx cy) <| sortBy ((\x -> -x) . .t0) ts
+                       touchIsModeSwitch t = isModeSwitch (dw, dh) (t.x, t.y)
+                   -- TODO we're expecting a sort here atm but don't really need it
+                   in map (recenter cx cy) <| filter (not . touchIsModeSwitch) <| ts
            in recenterAndResortAll <~ Window.dimensions ~ T.touches
 
 fingerSymbol : NTouch -> Form
@@ -30,8 +37,12 @@ touchesView = let viewTouches (dw, dh) ts = collage dw dh
 
 tapsR : Signal Point
 tapsR =
-  let recenter (dw, dh) t =
+  let toRecenteredPoint ((dw, dh), {x, y}) =
         let cx = dw `div` 2
             cy = dh `div` 2
-        in (toFloat (t.x - cx), toFloat (-t.y + cy))
-  in recenter <~ Window.dimensions ~ T.taps
+        in (toFloat (x - cx), toFloat (-y + cy))
+
+      tapIsModeSwitch (dims, {x, y}) = isModeSwitch dims (x, y)
+  in lift toRecenteredPoint
+       <| dropIf tapIsModeSwitch ((1, 1), { x = -99, y = -99 })
+       <| (,) <~ Window.dimensions ~ T.taps

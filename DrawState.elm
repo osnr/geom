@@ -1,6 +1,7 @@
 module DrawState where
 
 import Gesture as G
+import Debug
 import Tool as TL
 import Util (..)
 import Types (..)
@@ -27,9 +28,6 @@ update a ds = case a of
                 ChangeMode m    -> { ds | mode <- m }
                 Tap p           -> tapUpdate p ds
                 Resize (dw, dh) -> { ds | displayWidth <- toFloat dw, displayHeight <- toFloat dh }
-
-removeIndex : Int -> [(Int, a)] -> [a]
-removeIndex i ixs = snd <| unzip <| filter (\(i', _) -> i' /= i) ixs
 
 erase : DrawState -> Point -> DrawState
 erase ds p =

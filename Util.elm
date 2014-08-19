@@ -49,3 +49,6 @@ arc (cx, cy) (a, b) (startAngle, endAngle) =
       t = (endAngle - startAngle) / n
       f i = (cx + a * cos (t*i + startAngle), cy + b * sin (t*i + startAngle))
   in map f [0..n-1]
+
+removeIndex : Int -> [(Int, a)] -> [a]
+removeIndex i ixs = snd <| unzip <| filter (\(i', _) -> i' /= i) ixs
