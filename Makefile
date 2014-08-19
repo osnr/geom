@@ -1,2 +1,2 @@
 all: Geom.elm
-	elm --only-js Geom.elm
+	elm --make --only-js Geom.elm
