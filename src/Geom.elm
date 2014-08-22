@@ -1,8 +1,11 @@
 import Window
+
 import Problem
+import ProblemParser
 import Touches
 import Mode
 import DrawState as DS
+
 import Types (Action (..))
 
 -- this is a hack: https://groups.google.com/d/topic/elm-discuss/pevppMaHyyA/discussion
