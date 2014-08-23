@@ -4,7 +4,6 @@ import Text
 import Dict
 import Types (..)
 
-unitWidth = 20
 markHeight = 20
 
 toolTopHeight = 20

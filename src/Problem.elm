@@ -1,6 +1,6 @@
 module Problem where
 
-import Types (Length, Angle)
+import Types (Length, Angle, unitWidth)
 
 type Context a = { pos : (Float, Float) -- FIXME not Point?
                  , angle : Angle
@@ -35,7 +35,7 @@ display dw dh = collage dw dh . map displayCShape
 displayCShape : Context Shape -> Form
 displayCShape { pos, angle, child } = displayShape child
                                     |> rotate (degrees angle)
-                                    |> move pos
+                                    |> move (fst pos * unitWidth, snd pos * unitWidth)
 
 displayShape : Shape -> Form
 displayShape sh =
@@ -44,30 +44,39 @@ displayShape sh =
         circle 2 |> filled black
 
     Line { length } ->
-        segment (0, 0) (length, 0) |> traced defaultLine
+        let length' = length * unitWidth
+        in segment (0, 0) (length', 0) |> traced defaultLine
 
     Circle { r } ->
-        circle r |> outlined defaultLine
+        let r' = r * unitWidth
+        in circle r' |> outlined defaultLine
 
     Triangle { b, s, theta } ->
-        path [ (0, 0)
-             , (b, 0)
-             , (b - s*cos (degrees theta), s*sin (degrees theta))
-             , (0, 0) ]
-          |> outlined defaultLine
+        let b' = b * unitWidth
+            s' = s * unitWidth
+        in path [ (0, 0)
+                , (b', 0)
+                , (b' - s'*cos (degrees theta), s'*sin (degrees theta))
+                , (0, 0) ]
+            |> outlined defaultLine
 
     Parallelogram { b, s, theta } ->
-        path [ (0, 0)
-             , (b, 0)
-             , (b - s*cos (degrees theta), s*sin (degrees theta))
-             , (-s*cos (degrees theta), s*sin (degrees theta))
-             , (0, 0) ]
-          |> outlined defaultLine
+        let b' = b * unitWidth
+            s' = s * unitWidth
+        in path [ (0, 0)
+                , (b', 0)
+                , (b' - s'*cos (degrees theta), s'*sin (degrees theta))
+                , (-s'*cos (degrees theta), s'*sin (degrees theta))
+                , (0, 0) ]
+            |> outlined defaultLine
 
     Quadrilateral { b, s1, s2, theta, phi } ->
-        path [ (0, 0)
-             , (b, 0)
-             , (b - s1*cos (degrees theta), s1*sin (degrees theta))
-             , (-s2*cos (degrees phi), s2*sin (degrees phi))
-             , (0, 0) ]
-          |> outlined defaultLine
+        let b' = b * unitWidth
+            s1' = s1 * unitWidth
+            s2' = s2 * unitWidth
+        in path [ (0, 0)
+                , (b', 0)
+                , (b' - s1'*cos (degrees theta), s1'*sin (degrees theta))
+                , (-s2'*cos (degrees phi), s2'*sin (degrees phi))
+                , (0, 0) ]
+             |> outlined defaultLine

@@ -41,3 +41,5 @@ data Gesture = NoTouches
              | DrawArc { t:NTouch, c:Point, r:Length }
 
 data Action = Touches [NTouch] | Tap Point | ChangeMode Mode | Resize (Int, Int)
+
+unitWidth = 20
