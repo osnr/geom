@@ -6,6 +6,8 @@ import List
 import String
 import Char
 
+import Problem (..)
+
 import Parser (..)
 import Parser.Char (..)
 
@@ -53,32 +55,6 @@ astParam = (,) <$> identifier
 astValue : Parser Char AstValue
 astValue = (AstNumber <$> number) <|> (AstCoords <$> coords) <|> (AstBoolean <$> bool)
 
-type Context a = { pos : (Float, Float)
-                 , angle : Float
-
-                 , child : a }
-
-data Shape = Point
-
-           | Line { length : Float }
-
-           | Circle { r : Float }
-
-           | Triangle { b : Float
-                      , s : Float
-                      , theta : Float }
-
-           | Parallelogram { b : Float
-                           , s : Float
-                           , theta : Float }
-
-           | Quadrilateral { b : Float
-                           , s1 : Float
-                           , s2 : Float
-                           , theta : Float
-                           , delta : Float }
-
-type Problem = [Context Shape]
 
 toProblem : Ast -> Either String Problem
 toProblem shps = mapM toShape shps
@@ -92,8 +68,9 @@ toShape shp =
           lookupFloat' = lookupFloat ps (show shp)
 
       in lookupCoords' "pos" >>= \pos ->
-         lookupFloat' "angle" >>= \angle ->
+         withDefault 0 (lookupFloat' "angle") >>= \angle ->
          Right { pos = pos, angle = angle } >>= \ctx ->
+
          either Left (Right . child ctx) <|
          case typ of
            AstPoint -> Right Point
@@ -101,6 +78,30 @@ toShape shp =
            AstLine ->
              lookupFloat' "length" >>= \length ->
              Right <| Line { length = length }
+
+           AstCircle ->
+             lookupFloat' "r" >>= \r ->
+             Right <| Circle { r = r }
+
+           AstTriangle ->
+             lookupFloat' "b" >>= \b ->
+             lookupFloat' "s" >>= \s ->
+             lookupFloat' "theta" >>= \theta ->
+             Right <| Triangle { b = b, s = s, theta = theta }
+
+           AstParallelogram ->
+             lookupFloat' "b" >>= \b ->
+             lookupFloat' "s" >>= \s ->
+             lookupFloat' "theta" >>= \theta ->
+             Right <| Parallelogram { b = b, s = s, theta = theta } -- TODO share code w/ triangle
+
+           AstQuadrilateral ->
+             lookupFloat' "b" >>= \b ->
+             lookupFloat' "s1" >>= \s1 ->
+             lookupFloat' "s2" >>= \s2 ->
+             lookupFloat' "theta" >>= \theta ->
+             lookupFloat' "delta" >>= \delta ->
+             Right <| Quadrilateral { b = b, s1 = s1, s2 = s2, theta = theta, delta = delta }
 
 lookupCoords : Dict.Dict AstIdentifier AstValue -> DebugString -> AstIdentifier -> Either String (Float, Float)
 lookupCoords d dbg i =
@@ -115,6 +116,11 @@ lookupFloat d dbg i =
     Just (AstNumber val) -> Right val
     Just _               -> Left <| String.join "" ["Need number for parameter '", i, "' in shape '", dbg, "'."]
     Nothing              -> Left <| String.join "" ["Missing parameter '", i, "' in shape '", dbg, "'."]
+
+withDefault : a -> Either String a -> Either String a
+withDefault def mx = case mx of
+                       Right x -> Right x
+                       Left _  -> Right def
 
 child : a -> b -> {a | child : b}
 child ctx s = { ctx | child = s }

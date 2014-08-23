@@ -6,6 +6,7 @@ import Touches
 import Mode
 import DrawState as DS
 
+import Either (Either, Left, Right)
 import Types (Action, Resize, Tap, Touches, ChangeMode)
 
 -- this is a hack: https://groups.google.com/d/topic/elm-discuss/pevppMaHyyA/discussion
@@ -23,20 +24,30 @@ actions = merges [ lift Resize withInitialDimensions
 
 port problemText : Signal String
 
+problemS : Signal (Either String Problem.Problem)
+problemS = ProblemParser.parseProblem <~ problemText
+
 problemDisplayS : Signal Element
-problemDisplayS = width 300 . asText . ProblemParser.parseProblem <~ problemText
+problemDisplayS =
+  let problemDisplay (dw, dh) mp =
+        case mp of
+          Left err -> plainText err
+          Right p  -> Problem.display dw dh p
+  in problemDisplay <~ withInitialDimensions ~ problemS
 
 displayS : Signal Element
 displayS = DS.display <~ DS.drawStateS actions
 
-main = (\(dw, dh) tv disp problemDisp modeBtns ->
+main = (\(dw, dh) tv problemDisp disp modeBtns ->
             layers [ spacer dw dh |> color gray
                    , tv
-                   , disp
+
                    , problemDisp
+                   , disp
+
                    , container dw dh topRight modeBtns ])
-       <~ Window.dimensions
+       <~ withInitialDimensions
         ~ Touches.touchesView
-        ~ displayS
         ~ problemDisplayS
+        ~ displayS
         ~ Mode.modeButtonsS
