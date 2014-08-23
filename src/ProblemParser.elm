@@ -100,8 +100,8 @@ toShape shp =
              lookupFloat' "s1" >>= \s1 ->
              lookupFloat' "s2" >>= \s2 ->
              lookupFloat' "theta" >>= \theta ->
-             lookupFloat' "delta" >>= \delta ->
-             Right <| Quadrilateral { b = b, s1 = s1, s2 = s2, theta = theta, delta = delta }
+             lookupFloat' "phi" >>= \phi ->
+             Right <| Quadrilateral { b = b, s1 = s1, s2 = s2, theta = theta, phi = phi }
 
 lookupCoords : Dict.Dict AstIdentifier AstValue -> DebugString -> AstIdentifier -> Either String (Float, Float)
 lookupCoords d dbg i =
