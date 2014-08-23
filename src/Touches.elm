@@ -19,7 +19,7 @@ isModeSwitch (dw, dh) (x, y) = x > dw - Mode.boxWidth &&
 
 touchesR : Signal [NTouch]
 touchesR = let recenterAndResortAll (dw, dh) ts =
-                   let (cx, cy) = (dw // 2, dh // 2)
+                   let (cx, cy) = (dw `div` 2, dh `div` 2)
                        touchIsModeSwitch t = isModeSwitch (dw, dh) (t.x, t.y)
                    -- TODO we're expecting a sort here atm but don't really need it
                    in map (recenter cx cy) <| filter (not . touchIsModeSwitch) <| ts
@@ -38,8 +38,8 @@ touchesView = let viewTouches (dw, dh) ts = collage dw dh
 tapsR : Signal Point
 tapsR =
   let toRecenteredPoint ((dw, dh), {x, y}) =
-        let cx = dw // 2
-            cy = dh // 2
+        let cx = dw `div` 2
+            cy = dh `div` 2
         in (toFloat (x - cx), toFloat (-y + cy))
 
       tapIsModeSwitch (dims, {x, y}) = isModeSwitch dims (x, y)

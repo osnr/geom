@@ -14,14 +14,30 @@
                 /* No support for these yet, use at own risk */
                 -o-user-select: none;
                 user-select: none;
+
+                padding: 0; margin: 0;
             }
+
+            #geom { position: absolute; height: 100%; width: 50%; }
+
+            #editor { position: absolute; height: 100%; left: 50%; width: 50%; }
+
+            #edit { height: 100%; width: 100%; }
         </style>
     </head>
     <body style="overflow: hidden; zoom: reset;">
+        <div id="geom"></div>
+        <div id="editor">
+            <textarea id="edit"></textarea>
+        </div>
         <script>
-            var geom = Elm.fullscreen(Elm.Main, { initialDimensions: [800, 600] });
+            var geom = Elm.embed(Elm.Main, document.getElementById("geom"), { initialDimensions: [800, 600], problemText: "" });
 
-            geom.ports.initialDimensions.send([window.innerWidth, window.innerHeight]);
+            geom.ports.initialDimensions.send([window.innerWidth / 2, window.innerHeight]);
+
+            document.getElementById("edit").onkeyup = function() {
+                geom.ports.problemText.send(this.value);
+            }
         </script>
     </body>
 </html>

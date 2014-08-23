@@ -6,7 +6,7 @@ import Touches
 import Mode
 import DrawState as DS
 
-import Types (Action (..))
+import Types (Action, Resize, Tap, Touches, ChangeMode)
 
 -- this is a hack: https://groups.google.com/d/topic/elm-discuss/pevppMaHyyA/discussion
 -- and https://groups.google.com/d/topic/elm-discuss/X4wmckEtMyg/discussion
@@ -21,17 +21,22 @@ actions = merges [ lift Resize withInitialDimensions
                  , lift Touches Touches.touchesR 
                  , lift ChangeMode Mode.mode ]
 
-displayS : Signal Element
-displayS = (\ds -> layers [ Problem.displayProblem ds.displayWidth ds.displayHeight
-                          , DS.display ds ])
-           <~ DS.drawStateS actions
+port problemText : Signal String
 
-main = (\(dw, dh) tv disp modeBtns ->
+problemDisplayS : Signal Element
+problemDisplayS = width 300 . asText . ProblemParser.parseProblem <~ problemText
+
+displayS : Signal Element
+displayS = DS.display <~ DS.drawStateS actions
+
+main = (\(dw, dh) tv disp problemDisp modeBtns ->
             layers [ spacer dw dh |> color gray
                    , tv
                    , disp
+                   , problemDisp
                    , container dw dh topRight modeBtns ])
        <~ Window.dimensions
         ~ Touches.touchesView
         ~ displayS
+        ~ problemDisplayS
         ~ Mode.modeButtonsS

@@ -1,7 +1,7 @@
 module Mode where
 
 import Graphics.Input as I
-import Types (Mode (..))
+import Types (Mode, Ruler, Draw, Erase)
 
 modes : [Mode]
 modes = [Ruler, Draw, Erase]
@@ -18,7 +18,7 @@ boxHeight = 300
 modeButton : Mode -> Mode -> Element
 modeButton selectedMode m =
   I.button modeI.handle m (show m)
-  |> size boxWidth (boxHeight // length modes)
+  |> size boxWidth (boxHeight `div` length modes)
   |> if selectedMode == m
        then color white
        else color gray

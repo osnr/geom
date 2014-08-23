@@ -1,0 +1,12 @@
+{
+    "summary": "Euclidean geometry workspace",
+    "repository": "https://github.com/osnr/geom.git",
+    "dependencies": {
+        "dandandan/Parser": "0.0.14"
+    },
+    "exposed-modules": [],
+    "version": "0.1.0",
+    "elm-version": "0.12.3",
+    "license": "BSD3",
+    "description": ""
+}

@@ -1,7 +1,8 @@
 module ProblemParser where
 
-import Either (Either (..), either)
+import Either (Either, Left, Right, either)
 import Dict
+import List
 import String
 import Char
 
@@ -18,14 +19,14 @@ data AstShapeType = AstPoint | AstLine | AstCircle | AstTriangle | AstParallelog
 type AstIdentifier = String
 data AstValue = AstNumber Float | AstCoords (Float, Float) | AstBoolean Bool
 
-parseGeom : String -> Either String Ast
-parseGeom = parseString ast
+parseAst : String -> Either String Ast
+parseAst = parseString ast
 
 ast : Parser Char Ast
-ast = spaces *> astShape `seperatedBy` spaces <* spaces
+ast = spacesOpt *> astShape `separatedByOpt` spaces <* spacesOpt <* end
 
 astShape : Parser Char AstShape
-astShape = AstShape <$> astShapeType <*> (spaces *> astParams)
+astShape = AstShape <$> astShapeType <*> (spacesOpt *> astParams)
 
 astShapeType : Parser Char AstShapeType
 astShapeType = (AstPoint <$ string "Point")
@@ -36,21 +37,21 @@ astShapeType = (AstPoint <$ string "Point")
                <|> (AstQuadrilateral <$ string "Quadrilateral")
 
 astParams : Parser Char [(AstIdentifier, AstValue)]
-astParams = braced (spaces *>
-                    astParam `seperatedBy` (maySpaces *>
-                                            symbol ','
-                                            <* maySpaces)
-                    <* spaces)
+astParams = braced (spacesOpt *>
+                    astParam `separatedByOpt` (spacesOpt *>
+                                               symbol ','
+                                               <* spacesOpt)
+                    <* spacesOpt)
 
 astParam : Parser Char (AstIdentifier, AstValue)
 astParam = (,) <$> identifier
-               <*> (maySpaces *>
+               <*> (spacesOpt *>
                     symbol '=' *>
-                    maySpaces *>
+                    spacesOpt *>
                     astValue)
 
 astValue : Parser Char AstValue
-astValue = (AstNumber <$> float) <|> (AstCoords <$> coords) <|> (AstBoolean <$> bool)
+astValue = (AstNumber <$> number) <|> (AstCoords <$> coords) <|> (AstBoolean <$> bool)
 
 type Context a = { pos : (Float, Float)
                  , angle : Float
@@ -78,6 +79,9 @@ data Shape = Point
                            , delta : Float }
 
 type Problem = [Context Shape]
+
+toProblem : Ast -> Either String Problem
+toProblem shps = mapM toShape shps
 
 toShape : AstShape -> Either String (Context Shape)
 toShape shp =
@@ -115,18 +119,25 @@ lookupFloat d dbg i =
 child : a -> b -> {a | child : b}
 child ctx s = { ctx | child = s }
 
+
+parseProblem : String -> Either String Problem
+parseProblem s = parseAst s >>= toProblem
+
 {- utility functions -}
 isSpace : Char -> Bool
 isSpace c = c == ' ' || c == '\n'
 
-maySpaces : Parser Char [Char]
-maySpaces = many <| satisfy isSpace
+spacesOpt : Parser Char [Char]
+spacesOpt = many <| satisfy isSpace
 
 spaces : Parser Char [Char]
 spaces = some <| satisfy isSpace
 
 string : String -> Parser Char String
 string s = String.fromList <$> token (String.toList s)
+
+number : Parser Char Float
+number = (toFloat <$> integer) <|> float
 
 isIdentifier : Char -> Bool
 isIdentifier c = Char.isUpper c || Char.isLower c || Char.isDigit c || c == '_'
@@ -136,13 +147,17 @@ identifier = String.fromList <$> some (satisfy isIdentifier)
 
 coords : Parser Char (Float, Float)
 coords = parenthesized <|
-         (,) <$> (maySpaces *> float)
-             <*> (maySpaces *> symbol ',' *>
-                  float
-                  <* maySpaces)
+         (,) <$> (spacesOpt *> number)
+             <*> (spacesOpt *> symbol ',' *> spacesOpt *>
+                  number
+                  <* spacesOpt)
 
 bool : Parser Char Bool
 bool = (True <$ string "true") <|> (False <$ string "false")
+
+-- Zero or more, rather than one or more
+separatedByOpt : Parser a r -> Parser a s -> Parser a [r]
+separatedByOpt p s = optional (seperatedBy p s) []
 
 (>>=) : Either a b -> (b -> Either a c) -> Either a c
 x >>= f = case x of
@@ -150,3 +165,12 @@ x >>= f = case x of
             Right r -> f r
 
 infixl 1 >>=
+
+sequence : [Either a b] -> Either a [b]
+sequence ms = let k m m' = m >>= \x ->
+                           m' >>= \xs ->
+                           Right (x::xs)
+              in foldr k (Right []) ms
+
+mapM : (b -> Either a c) -> [b] -> Either a [c]
+mapM f xs = sequence (List.map f xs)
