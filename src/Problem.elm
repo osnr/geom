@@ -49,10 +49,15 @@ displayShape sh =
     Circle { r } ->
         circle r |> outlined defaultLine
 
-    -- Triangle ->
+    Triangle { b, s, theta } ->
+        path [ (0, 0)
+             , (b, 0)
+             , (b - s*cos (degrees theta), s*cos (degrees theta))
+             , (0, 0) ]
+          |> outlined defaultLine
 
-    -- Parallelogram ->
-    -- Quadrilateral ->
+    -- Parallelogram { b, s, theta } ->
+    -- Quadrilateral { b, s1, s2, theta, delta } ->
 
 -- problem : Form
 -- problem = let triangle = group
