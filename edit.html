@@ -2,6 +2,8 @@
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
+        <script src="//www.parsecdn.com/js/parse-1.2.19.min.js"></script>
+
         <script src="lib/elm-runtime.js"></script>
         <script src="Geom.js"></script>
 
@@ -22,22 +24,120 @@
 
             #editor { position: absolute; height: 100%; left: 50%; width: 50%; }
 
-            #edit { height: 100%; width: 100%; }
+            #edit { position: absolute; top: 0; left: 0; width: 100%; bottom: 20px; }
+
+            #controls { position: absolute; bottom: 0; width: 100%; height: 20px; }
         </style>
     </head>
     <body style="overflow: hidden; zoom: reset;">
         <div id="geom"></div>
         <div id="editor">
             <textarea id="edit"></textarea>
+            <div id="controls">
+                <div style="float: left;">
+                    <select id="file-list">
+                    </select>
+                    <button id="load">Load</button>
+                    <button id="refresh">Refresh file list</button>
+                </div>
+                <div style="float: right;">
+                    <input id="save-name" type="text"></input>
+                    <button id="save">Save</button>
+                </div>
+            </div>
         </div>
         <script>
             var geom = Elm.embed(Elm.Main, document.getElementById("geom"), { initialDimensions: [800, 600], problemText: "" });
 
             geom.ports.initialDimensions.send([window.innerWidth / 2, window.innerHeight]);
 
-            document.getElementById("edit").onkeyup = function() {
-                geom.ports.problemText.send(this.value);
-            }
+            var edit = document.getElementById("edit");
+            var updateView = edit.onkeyup = function() {
+                geom.ports.problemText.send(edit.value);
+            };
+
+            Parse.initialize("c0tKZXquLqH7bMmGSnopEruhZVIVF5yY9mbYtLdP", "0c7jggFRhZDmqgt3fwk6wQQjWEmiP3ap2DUWjIsq");
+
+            var Problem = Parse.Object.extend("Problem");
+
+            var fileList = document.getElementById("file-list");
+            var refreshList = document.getElementById("refresh").onclick = function() {
+                var query = new Parse.Query(Problem);
+                query.descending("updatedAt");
+
+                query.find({
+                    success: function(results) {
+                        fileList.innerHTML = "";
+                        for (var i = 0; i < results.length; i++) {
+                            var problem = results[i];
+                            var option = document.createElement("option");
+                            option.innerText = problem.get("name");
+                            fileList.appendChild(option);
+                        }
+                    },
+                    error: function(error) {
+                        alert("Error refreshing list of problem files: " + error.code + " " + error.message);
+                    }
+                });
+            };
+            refreshList();
+
+            document.getElementById("load").onclick = function() {
+                var query = new Parse.Query(Problem);
+                var name = fileList.value;
+                query.equalTo("name", name);
+                query.descending("updatedAt");
+
+                query.find({
+                    success: function(results) {
+                        if (results.length > 0) {
+                            var problem = results[0];
+                            saveName.value = problem.get("name");
+                            edit.value = problem.get("text");
+
+                            updateView();
+                        } else {
+                            alert("File " + name + " not found.");
+                        }
+                    },
+                    error: function(error) {
+                        alert("Error loading file: " + error.code + " " + error.message);
+                    }
+                });
+            };
+
+            var saveName = document.getElementById("save-name");
+            document.getElementById("save").onclick = function() {
+                var name = saveName.value;
+                var text = edit.value;
+
+                if (name === "") {
+                    alert("Please give your problem a name before saving.");
+                    return;
+                }
+
+                var query = new Parse.Query(Problem);
+                query.equalTo("name", name);
+                query.descending("updatedAt");
+
+                query.find().then(function(results) {
+                    if (results.length > 0) {
+                        return results[0];
+                    } else {
+                        return new Problem();
+                    }
+                }).then(function(problem) {
+                    problem.set("name", saveName.value);
+                    problem.set("text", edit.value);
+                    return problem.save();
+
+                }).then(function(problem) {
+                    console.log("Successful save to", problem.id);
+                    refreshList();
+                }, function(error) {
+                    alert("Error trying to save: " + error.code + " " + error.message);
+                });
+            };
         </script>
     </body>
 </html>

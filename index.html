@@ -2,6 +2,9 @@
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
+        <script src="//www.parsecdn.com/js/parse-1.2.19.min.js"></script>
+        <script src="lib/moment.js"></script>
+
         <script src="lib/elm-runtime.js"></script>
         <script src="Geom.js"></script>
 
@@ -15,13 +18,68 @@
                 -o-user-select: none;
                 user-select: none;
             }
+
+            #file-list {
+                height: 100%;
+                width: 100%;
+                overflow: auto;
+            }
+
+            #file-list button {
+                height: 100px;
+                width: 100%;
+
+                margin-bottom: 1em;
+            }
         </style>
     </head>
     <body style="overflow: hidden; zoom: reset;">
+        <div id="file-list">
+            <button id="init-empty">Empty canvas</button>
+        </div>
         <script>
-            var geom = Elm.fullscreen(Elm.Main, { initialDimensions: [800, 600], problemText: "" });
+            Parse.initialize("c0tKZXquLqH7bMmGSnopEruhZVIVF5yY9mbYtLdP", "0c7jggFRhZDmqgt3fwk6wQQjWEmiP3ap2DUWjIsq");
 
-            geom.ports.initialDimensions.send([window.innerWidth, window.innerHeight]);
+            document.getElementById("init-empty").onclick = function() {
+                init("");
+            };
+
+            var fileList = document.getElementById("file-list");
+
+            var query = new Parse.Query("Problem");
+            query.descending("updatedAt");
+            query.find({
+                success: function(results) {
+                    var count = document.createElement("p");
+                    count.innerText = "Found " + results.length + " problem files:";
+                    fileList.insertBefore(count, fileList.firstChild);
+
+                    for (var i = 0; i < results.length; i++) {
+                        var problem = results[i];
+
+                        var button = document.createElement("button");
+                        button.innerText = results[i].get("name") + "\n" +
+                            moment(results[i].updatedAt).fromNow();
+                        button.onclick = (function(problem) {
+                            return function() {
+                                init(problem.get("text"));
+                            };
+                        })(problem);
+
+                        fileList.appendChild(button);
+                    }
+                },
+                error: function(error) {
+                    alert("Error querying for saved problem files: " + error.code + " " + error.message);
+                }
+            });
+
+            var init = function(text) {
+                fileList.style.display = "none";
+
+                var geom = Elm.fullscreen(Elm.Main, { initialDimensions: [800, 600], problemText: text });
+                geom.ports.initialDimensions.send([window.innerWidth, window.innerHeight]);
+            };
         </script>
     </body>
 </html>
