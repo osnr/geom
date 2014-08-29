@@ -107,7 +107,7 @@ touchesUpdate ts ds =
              arcAngle' = atan2 (t.y - sy) (t.x - sx)
          in { ds' | drawing <-
                case ds'.drawing of
-                 DrawingArc counter (_, _, _, arcAngle) ->
+                 DrawingArc counter minAngle maxAngle (_, _, _, arcAngle) ->
                    let counter1 =
                        case counter of
                          Nothing -> if abs (arcAngle - arcAngle') > pi
@@ -118,21 +118,23 @@ touchesUpdate ts ds =
                              in if | gap > pi  -> Just (2*pi + arcAngle')
                                    | gap < -pi -> Just (arcAngle' - 2*pi)
                                    | otherwise -> Nothing
-                   in DrawingArc counter1 <|
-                                 case counter1 of
-                                   Nothing ->
-                                     (c, r, ds'.toolAngle, arcAngle')
-                                   Just oldAngle ->
-                                     (c, r, ds'.toolAngle, oldAngle)
-                 _ -> DrawingArc Nothing (c, r, ds'.toolAngle, arcAngle') }
+
+                       arcAngle'' = case counter1 of
+                                      Nothing       -> arcAngle'
+                                      Just oldAngle -> oldAngle
+                   in DrawingArc counter1 (min minAngle arcAngle'') (max maxAngle arcAngle'')
+                        (c, r, minAngle, maxAngle)
+
+                 _ -> DrawingArc Nothing (min ds'.toolAngle arcAngle') (max ds'.toolAngle arcAngle')
+                        (c, r, ds'.toolAngle, arcAngle') }
 
        otherwise ->
          case ds'.drawing of
            NotDrawing -> ds'
            DrawingLine l -> { ds' | drawing <- NotDrawing
                                   , lines <- l :: ds'.lines } -- TODO get rid of drawing earlier
-           DrawingArc _ a -> { ds' | drawing <- NotDrawing
-                                   , arcs <- a :: ds'.arcs } -- TODO get rid of drawing earlier
+           DrawingArc _ _ _ a -> { ds' | drawing <- NotDrawing
+                                       , arcs <- a :: ds'.arcs } -- TODO get rid of drawing earlier
 
 display : DrawState -> Element
 display { displayWidth, displayHeight,
@@ -141,12 +143,12 @@ display { displayWidth, displayHeight,
                          <| case drawing of
                               NotDrawing -> lines
                               DrawingLine l -> l :: lines
-                              DrawingArc _ _ -> lines
+                              DrawingArc _ _ _ _ -> lines
             arcForms = map (\(c, l, a1, a2) -> traced defaultLine <| arc c (l, l) (a1, a2))
                        <| case drawing of
                             NotDrawing -> arcs
                             DrawingLine _ -> arcs
-                            DrawingArc _ a -> a :: arcs
+                            DrawingArc _ _ _ a -> a :: arcs
             pointForms = map (\p -> move p <| filled black <| circle 5) points
         in collage (ceiling displayWidth) (ceiling displayHeight)
            <| pointForms ++ linesForms ++ arcForms ++ [TL.displayTool toolStart toolAngle toolLength]

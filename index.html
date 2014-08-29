@@ -38,11 +38,18 @@
             <button id="init-empty">Empty canvas</button>
         </div>
         <script>
-            Parse.initialize("c0tKZXquLqH7bMmGSnopEruhZVIVF5yY9mbYtLdP", "0c7jggFRhZDmqgt3fwk6wQQjWEmiP3ap2DUWjIsq");
+            var init = function(text) {
+                fileList.style.display = "none";
+
+                var geom = Elm.fullscreen(Elm.Main, { initialDimensions: [800, 600], problemText: text });
+                geom.ports.initialDimensions.send([window.innerWidth, window.innerHeight]);
+            };
 
             document.getElementById("init-empty").onclick = function() {
                 init("");
             };
+
+            if ("Parse" in window) Parse.initialize("c0tKZXquLqH7bMmGSnopEruhZVIVF5yY9mbYtLdP", "0c7jggFRhZDmqgt3fwk6wQQjWEmiP3ap2DUWjIsq");
 
             var fileList = document.getElementById("file-list");
 
@@ -73,13 +80,6 @@
                     alert("Error querying for saved problem files: " + error.code + " " + error.message);
                 }
             });
-
-            var init = function(text) {
-                fileList.style.display = "none";
-
-                var geom = Elm.fullscreen(Elm.Main, { initialDimensions: [800, 600], problemText: text });
-                geom.ports.initialDimensions.send([window.innerWidth, window.innerHeight]);
-            };
         </script>
     </body>
 </html>

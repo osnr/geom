@@ -26,7 +26,7 @@ type Length = Float
 type Line = (Point, Point)
 type Arc = (Point, Length, Angle, Angle)
 
-data Drawing = NotDrawing | DrawingLine Line | DrawingArc (Maybe Angle) Arc
+data Drawing = NotDrawing | DrawingLine Line | DrawingArc (Maybe Angle) Angle Angle Arc
 
 data Gesture = NoTouches
 
