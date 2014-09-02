@@ -71,7 +71,8 @@
                         for (var i = 0; i < results.length; i++) {
                             var problem = results[i];
                             var option = document.createElement("option");
-                            option.innerText = problem.get("name");
+                            option.innerText = option.textContent =
+                                problem.get("name");
                             fileList.appendChild(option);
                         }
                     },

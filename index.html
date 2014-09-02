@@ -58,14 +58,16 @@
             query.find({
                 success: function(results) {
                     var count = document.createElement("p");
-                    count.innerText = "Found " + results.length + " problem files:";
+                    count.innerText = count.textContent =
+                        "Found " + results.length + " problem files:";
                     fileList.insertBefore(count, fileList.firstChild);
 
                     for (var i = 0; i < results.length; i++) {
                         var problem = results[i];
 
                         var button = document.createElement("button");
-                        button.innerText = results[i].get("name") + "\n" +
+                        button.innerText = button.textContent =
+                            results[i].get("name") + "\n" +
                             moment(results[i].updatedAt).fromNow();
                         button.onclick = (function(problem) {
                             return function() {
