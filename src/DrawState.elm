@@ -1,13 +1,19 @@
 module DrawState where
 
-import Gesture as G
 import Debug
+import Dict
+
+import Gesture as G
+import Problem
+
 import Tool as TL
 import Util (..)
 import Types (..)
 
 initialDrawState : DrawState
-initialDrawState = { lines = []
+initialDrawState = { problem = Dict.empty
+
+                   , lines = []
                    , arcs = []
                    , points = []
 
@@ -27,10 +33,12 @@ initialDrawState = { lines = []
 
 update : Action -> DrawState -> DrawState
 update a ds = case a of
+                ChangeProblem p -> { ds | problem <- p }
                 Touches ts      -> touchesUpdate ts ds
                 ChangeMode m    -> { ds | mode <- m }
                 Tap p           -> tapUpdate p ds
-                Resize (dw, dh) -> { ds | displayWidth <- toFloat dw, displayHeight <- toFloat dh }
+                Resize (dw, dh) -> { ds | displayWidth <- toFloat dw
+                                        , displayHeight <- toFloat dh }
 
 erase : DrawState -> Point -> DrawState
 erase ds p =
@@ -68,6 +76,7 @@ tapUpdate p ds =
             (\end -> { ds | points <- end :: ds.points })
             (\_   -> ds)
       Erase -> erase ds p
+      Object -> ds
       Ruler -> ds
 
 touchesUpdate : [NTouch] -> DrawState -> DrawState
@@ -75,32 +84,52 @@ touchesUpdate ts ds =
   let gest = G.gesture ts ds
       ds' = { ds | gesture <- gest }
   in case gest of
-       Translate { toolP0, touchP0, t } -> -- TODO optimize so we don't do all this bounding always
-         let toolStart' = boundPoint ((-ds.displayWidth/2, ds.displayWidth/2), (-ds.displayHeight/2, ds.displayHeight/2))
+       TranslateTool { toolP0, touchP0, t } -> -- TODO optimize so we don't do all this bounding always
+         let toolStart' = boundPoint ((-ds'.displayWidth/2, ds'.displayWidth/2), (-ds'.displayHeight/2, ds'.displayHeight/2))
                           <| toolP0 `addv` ((t.x, t.y) `subv` touchP0)
              tool = ds'.tool
          in { ds' | tool <- { tool | pos <- toolStart' } }
 
-       AdjustLength { l0, t } ->
+       ScaleTool { l0, t } ->
          let toolLength' = l0 + (t.x - t.x0) * cos ds'.tool.angle +
                                 (t.y - t.y0) * sin ds'.tool.angle
              tool = ds'.tool
              child = ds'.tool.child
          in { ds' | tool <- { tool | child <- { child | length <- bound (0, ds.displayWidth) toolLength' } } }
 
-       Rotate { angleOffset0, t } ->
-         let (sx, sy) = ds'.tool.pos
-             touchAngle = atan2 (t.y - sy) (t.x - sx)
-             toolAngle' = angleOffset0 + touchAngle
-             (ex', ey') = ( sx + ds.tool.child.length * cos toolAngle'
-                          , sy + ds.tool.child.length * sin toolAngle' )
-             (ex'', ey'') = boundPoint ((-ds.displayWidth/2, ds.displayWidth/2),
-                                        (-ds.displayHeight/2, ds.displayHeight/2))
-                                       (ex', ey')
-             toolAngle'' = atan2 (ey'' - sy) (ex'' - sx)
-             tool = ds'.tool
-         in { ds' | tool <- { tool | angle <- toolAngle'' } }
+       RotateTool { angleOffset0, t } ->
+         let tool = ds'.tool
+         in { ds' | tool <-
+              { tool | angle <- G.rotate ds'.displayWidth ds'.displayHeight
+                                         angleOffset0 t
+                                         ds'.tool.pos ds'.tool.child.length } }
 
+       -- OBJECT MODE
+       --------------
+       TranslateObj { ok, oP0, touchP0, t } -> -- TODO optimize so we don't do all this bounding always
+         let pos' = boundPoint ( (-ds'.displayWidth/2, ds'.displayWidth/2)
+                               , (-ds'.displayHeight/2, ds'.displayHeight/2) )
+                    <| oP0 `addv` ((t.x, t.y) `subv` touchP0)
+             tran (Just obj) = Just { obj | pos <- pos' }
+         in { ds' | problem <- Dict.update ok tran ds'.problem }
+
+       ScaleObj { ok, l0, t } ->
+         let len' = l0 + (t.x - t.x0) * cos ds'.tool.angle +
+                         (t.y - t.y0) * sin ds'.tool.angle
+                  |> bound (0, ds.displayWidth)
+             scal (Just obj) = Just { obj | child <- Problem.setObjLength obj.child len' }
+         in { ds' | problem <- Dict.update ok scal ds'.problem }
+
+       RotateObj { ok, angleOffset0, t } ->
+         let obj = Dict.getOrFail ok ds'.problem
+             angle' = G.rotate ds'.displayWidth ds'.displayHeight
+                               angleOffset0 t
+                               obj.pos (Problem.lengthOf obj)
+             obj' = { obj | angle <- angle' }
+         in { ds' | problem <- Dict.insert ok obj' ds'.problem }
+
+       -- DRAW MODE
+       ------------
        DrawLine { t, p1 } ->
          let theta = angularDist t - ds.tool.angle
              r = (norm (displacement t)) * cos theta
@@ -144,7 +173,8 @@ touchesUpdate ts ds =
                                        , arcs <- a :: ds'.arcs } -- TODO get rid of drawing earlier
 
 display : DrawState -> Element
-display { displayWidth, displayHeight,
+display { displayWidth, displayHeight, mode,
+          problem,
           lines, arcs, points, tool, drawing } =
         let linesForms = map (traced defaultLine . uncurry segment)
                          <| case drawing of
@@ -158,7 +188,11 @@ display { displayWidth, displayHeight,
                             DrawingArc _ _ _ a -> a :: arcs
             pointForms = map (\p -> move p <| filled black <| circle 5) points
         in collage (ceiling displayWidth) (ceiling displayHeight)
-           <| pointForms ++ linesForms ++ arcForms ++ [TL.displayTool tool.pos tool.angle tool.child.length]
+           <| Problem.display (mode == Object) problem ::
+              pointForms ++
+              linesForms ++
+              arcForms ++
+              [ TL.displayTool (mode == Ruler) tool.pos tool.angle tool.child.length ]
 
 drawStateS : Signal Action -> Signal DrawState
 drawStateS actions = foldp update initialDrawState actions

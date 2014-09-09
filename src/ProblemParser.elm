@@ -6,7 +6,7 @@ import List
 import String
 import Char
 
-import Types (Context)
+import Types (..)
 import Problem (..)
 
 import Parser (..)
@@ -60,7 +60,7 @@ astValue = (AstNumber <$> number) <|> (AstCoords <$> coords) <|> (AstBoolean <$>
 toProblem : Ast -> Either String Problem
 toProblem shps = mapM toShape shps
 
-toShape : AstShape -> Either String (Context Shape)
+toShape : AstShape -> Either String (Context Object)
 toShape shp =
   case shp of
     AstShape typ params ->
@@ -68,9 +68,10 @@ toShape shp =
           lookupCoords' = lookupCoords ps (show shp)
           lookupFloat' = lookupFloat ps (show shp)
 
-      in lookupCoords' "pos" >>= \pos ->
+      in lookupCoords' "pos" >>= \(x, y) ->
          withDefault 0 (lookupFloat' "angle") >>= \angle ->
-         Right { pos = pos, angle = angle } >>= \ctx ->
+         Right { pos = (x * unitWidth, y * unitWidth)
+               , angle = degrees angle } >>= \ctx ->
 
          either Left (Right . child ctx) <|
          case typ of
@@ -78,23 +79,27 @@ toShape shp =
 
            AstLine ->
              lookupFloat' "length" >>= \length ->
-             Right <| Line { length = length }
+             Right <| Line { length = length * unitWidth }
 
            AstCircle ->
              lookupFloat' "r" >>= \r ->
-             Right <| Circle { r = r }
+             Right <| Circle { r = r * unitWidth }
 
            AstTriangle ->
              lookupFloat' "b" >>= \b ->
              lookupFloat' "s" >>= \s ->
              lookupFloat' "theta" >>= \theta ->
-             Right <| Triangle { b = b, s = s, theta = theta }
+             Right <| Triangle { b = b * unitWidth
+                               , s = s * unitWidth
+                               , theta = degrees theta }
 
            AstParallelogram ->
              lookupFloat' "b" >>= \b ->
              lookupFloat' "s" >>= \s ->
              lookupFloat' "theta" >>= \theta ->
-             Right <| Parallelogram { b = b, s = s, theta = theta } -- TODO share code w/ triangle
+             Right <| Parallelogram { b = b * unitWidth
+                                    , s = s * unitWidth
+                                    , theta = degrees theta } -- TODO share code w/ triangle
 
            AstQuadrilateral ->
              lookupFloat' "b" >>= \b ->
@@ -102,7 +107,11 @@ toShape shp =
              lookupFloat' "s2" >>= \s2 ->
              lookupFloat' "theta" >>= \theta ->
              lookupFloat' "phi" >>= \phi ->
-             Right <| Quadrilateral { b = b, s1 = s1, s2 = s2, theta = theta, phi = phi }
+             Right <| Quadrilateral { b = b * unitWidth
+                                    , s1 = s1 * unitWidth
+                                    , s2 = s2 * unitWidth
+                                    , theta = degrees theta
+                                    , phi = degrees phi }
 
 lookupCoords : Dict.Dict AstIdentifier AstValue -> DebugString -> AstIdentifier -> Either String (Float, Float)
 lookupCoords d dbg i =

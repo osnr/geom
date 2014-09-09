@@ -1,77 +1,81 @@
 module Problem where
 
-import Types (Context, Length, Angle, unitWidth)
+import Dict
+import Types (..)
 
-data Shape = Point
+display : Bool -> ProblemDict -> Form
+display objMode = group . map (displayCShape objMode) . Dict.values
 
-           | Line { length : Length }
+displayCShape : Bool -> Context Object -> Form
+displayCShape objMode { pos, angle, child } =
+  group ([displayShape child] ++ if objMode then [displayStartEnd child] else [])
+  |> rotate angle
+  |> move (fst pos, snd pos)
 
-           | Circle { r : Length }
-
-           | Triangle { b : Length
-                      , s : Length
-                      , theta : Angle }
-
-           | Parallelogram { b : Length
-                           , s : Length
-                           , theta : Angle }
-
-           | Quadrilateral { b : Length
-                           , s1 : Length
-                           , s2 : Length
-                           , theta : Angle
-                           , phi : Angle }
-
-type Problem = [Context Shape]
-
-display : Int -> Int -> Problem -> Element
-display dw dh = collage dw dh . map displayCShape
-
-displayCShape : Context Shape -> Form
-displayCShape { pos, angle, child } = displayShape child
-                                    |> rotate (degrees angle)
-                                    |> move (fst pos * unitWidth, snd pos * unitWidth)
-
-displayShape : Shape -> Form
-displayShape sh =
-  case sh of
+displayShape : Object -> Form
+displayShape obj =
+  case obj of
     Point ->
         circle 2 |> filled black
 
     Line { length } ->
-        let length' = length * unitWidth
-        in segment (0, 0) (length', 0) |> traced defaultLine
+        segment (0, 0) (length, 0) |> traced defaultLine
 
     Circle { r } ->
-        let r' = r * unitWidth
-        in circle r' |> outlined defaultLine
+        circle r |> outlined defaultLine
 
     Triangle { b, s, theta } ->
-        let b' = b * unitWidth
-            s' = s * unitWidth
-        in path [ (0, 0)
-                , (b', 0)
-                , (b' - s'*cos (degrees theta), s'*sin (degrees theta))
-                , (0, 0) ]
-            |> outlined defaultLine
+        path [ (0, 0)
+             , (b, 0)
+             , (b - s*cos theta, s*sin theta)
+             , (0, 0) ]
+         |> outlined defaultLine
 
     Parallelogram { b, s, theta } ->
-        let b' = b * unitWidth
-            s' = s * unitWidth
-        in path [ (0, 0)
-                , (b', 0)
-                , (b' - s'*cos (degrees theta), s'*sin (degrees theta))
-                , (-s'*cos (degrees theta), s'*sin (degrees theta))
-                , (0, 0) ]
-            |> outlined defaultLine
+        path [ (0, 0)
+             , (b, 0)
+             , (b - s*cos theta, s*sin theta)
+             , (-s*cos theta, s*sin theta)
+             , (0, 0) ]
+         |> outlined defaultLine
 
     Quadrilateral { b, s1, s2, theta, phi } ->
-        let b' = b * unitWidth
-            s1' = s1 * unitWidth
-            s2' = s2 * unitWidth
-        in path [ (0, 0)
-                , (b', 0)
-                , (b' - s1'*cos (degrees theta), s1'*sin (degrees theta))
-                , (-s2'*cos (degrees phi), s2'*sin (degrees phi))
-                , (0, 0) ]
-             |> outlined defaultLine
+        path [ (0, 0)
+             , (b, 0)
+             , (b - s1*cos theta, s1*sin theta)
+             , (-s2*cos phi, s2*sin phi)
+             , (0, 0) ]
+          |> outlined defaultLine
+
+displayStartEnd : Object -> Form
+displayStartEnd obj =
+  let end = circle 4
+          |> filled (rgba 0 255 0 0.5)
+          |> case obj of
+               Point -> id
+               Line {length} -> moveX length
+               Circle {r} -> moveX r
+               Triangle {b} -> moveX b
+               Parallelogram {b} -> moveX b
+               Quadrilateral {b} -> moveX b
+
+  in group [ circle 4 |> filled (rgba 255 0 0 0.5)
+           , end ]
+
+lengthOf : Context Object -> Length
+lengthOf { child } =
+  case child of
+    Line {length} -> length
+    Circle {r} -> r
+    Triangle {b} -> b
+    Parallelogram {b} -> b
+    Quadrilateral {b} -> b
+
+setObjLength : Object -> Length -> Object
+setObjLength child l =
+  case child of
+    Line params -> Line { params | length <- l }
+    Circle params -> Circle { params | r <- l }
+    Triangle params -> Triangle { params | b <- l }
+    Parallelogram params -> Parallelogram { params | b <- l }
+    Quadrilateral params -> Quadrilateral { params | b <- l }

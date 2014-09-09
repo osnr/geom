@@ -1,4 +1,7 @@
 import Window
+import Either (isRight)
+import Dict
+import Debug
 
 import Problem
 import ProblemParser
@@ -7,7 +10,7 @@ import Mode
 import DrawState as DS
 
 import Either (Either, Left, Right)
-import Types (Action, Resize, Tap, Touches, ChangeMode)
+import Types (..)
 
 -- this is a hack: https://groups.google.com/d/topic/elm-discuss/pevppMaHyyA/discussion
 -- and https://groups.google.com/d/topic/elm-discuss/X4wmckEtMyg/discussion
@@ -17,37 +20,41 @@ withInitialDimensions : Signal (Int, Int)
 withInitialDimensions = merge Window.dimensions initialDimensions
 
 actions : Signal Action
-actions = merges [ lift Resize withInitialDimensions
+actions = merges [ lift (ChangeProblem . toProblemDict) <| keepIf isRight (Right []) problemS
+                 , lift ChangeMode Mode.mode
+                 , lift Resize withInitialDimensions
                  , lift Tap Touches.tapsR
-                 , lift Touches Touches.touchesR 
-                 , lift ChangeMode Mode.mode ]
+                 , lift Touches Touches.touchesR ]
 
 port problemText : Signal String
 
-problemS : Signal (Either String Problem.Problem)
+problemS : Signal (Either String Problem)
 problemS = ProblemParser.parseProblem <~ problemText
 
-problemDisplayS : Signal Element
-problemDisplayS =
-  let problemDisplay (dw, dh) mp =
+toProblemDict : Either String Problem -> ProblemDict
+toProblemDict (Right p) = Dict.fromList . zip [0..length p] <| p
+
+problemErrorDisplayS : Signal Element
+problemErrorDisplayS =
+  let problemDisplay mp =
         case mp of
           Left err -> plainText err
-          Right p  -> Problem.display dw dh p
-  in problemDisplay <~ withInitialDimensions ~ problemS
+          Right _  -> empty
+  in problemDisplay <~ problemS
 
 displayS : Signal Element
 displayS = DS.display <~ DS.drawStateS actions
 
-main = (\(dw, dh) tv problemDisp disp modeBtns ->
+main = (\(dw, dh) tv problemErrorDisp disp modeBtns ->
             layers [ spacer dw dh |> color gray
                    , tv
 
-                   , problemDisp
+                   , problemErrorDisp
                    , disp
 
                    , container dw dh topRight modeBtns ])
        <~ withInitialDimensions
         ~ Touches.touchesView
-        ~ problemDisplayS
+        ~ problemErrorDisplayS
         ~ displayS
         ~ Mode.modeButtonsS

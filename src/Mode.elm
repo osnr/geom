@@ -1,19 +1,19 @@
 module Mode where
 
 import Graphics.Input as I
-import Types (Mode, Ruler, Draw, Erase)
+import Types (Mode, Ruler, Object, Draw, Erase)
 
 import Window
 import Touch
 
 modes : [Mode]
-modes = [Ruler, Draw, Erase]
+modes = [Ruler, Draw, Object, Erase]
 
 modeI : I.Input Mode
 modeI = I.input Ruler
 
 boxWidth = 150
-boxHeight = 300
+boxHeight = 450
 
 dimTaps : Signal ((Int, Int), { x : Int, y : Int })
 dimTaps = lift2 (,) Window.dimensions Touch.taps

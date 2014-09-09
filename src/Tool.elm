@@ -36,10 +36,13 @@ toolBottom len = rect len toolBottomHeight
                |> moveX (len/2)
                |> \back -> group [back, toolMarks len]
 
-displayTool : Point -> Angle -> Length -> Form
-displayTool c angle len = group [ toolTop len |> moveY 11
-                                , toolBottom len |> moveY -10
-                                , circle 4 |> filled (rgba 255 0 0 0.5)
-                                , circle 4 |> filled (rgba 0 255 0 0.5) |> moveX len ]
-                        |> move c
-                        |> rotate angle
+displayTool : Bool -> Point -> Angle -> Length -> Form
+displayTool toolMode c angle len =
+  group ([ toolTop len |> moveY 11
+         , toolBottom len |> moveY -10 ] ++
+         (if toolMode
+             then [ circle 4 |> filled (rgba 255 0 0 0.5)
+                  , circle 4 |> filled (rgba 0 255 0 0.5) |> moveX len ]
+             else []))
+    |> move c
+    |> rotate angle

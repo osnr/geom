@@ -1,5 +1,10 @@
 module Gesture where
 
+import Dict
+
+import Debug
+import Problem (lengthOf)
+
 import Util (..)
 import Types (..)
 
@@ -19,12 +24,33 @@ isTouchParallel toolAngle t =
   let theta = angularDist t - toolAngle
   in abs (cos theta) > abs (sin theta)
 
-initEndGesture : NTouch -> DrawState -> Gesture
-initEndGesture t ds =
+initToolEndGesture : NTouch -> DrawState -> Gesture
+initToolEndGesture t ds =
   if isTouchParallel ds.tool.angle t
-    then AdjustLength { l0 = ds.tool.child.length, t = t } -- pulling left or right
+    then ScaleTool { l0 = ds.tool.child.length, t = t } -- pulling left or right
     else let (sx, sy) = ds.tool.pos
-         in Rotate { angleOffset0 = ds.tool.angle - atan2 (t.y - sy) (t.x - sx), t = t }
+         in RotateTool { angleOffset0 = ds.tool.angle - atan2 (t.y - sy) (t.x - sx), t = t }
+
+-- FIXME huge code duplication btwn tool / object
+initObjEndGesture : NTouch -> ObjectKey -> DrawState -> Gesture
+initObjEndGesture t ok ds =
+  let obj = Dict.getOrFail ok ds.problem
+  in if isTouchParallel obj.angle t
+       then ScaleObj { l0 = lengthOf obj, ok = ok, t = t } -- pulling left or right
+       else let (sx, sy) = obj.pos
+            in RotateObj { angleOffset0 = obj.angle - atan2 (t.y - sy) (t.x - sx)
+                         , ok = ok
+                         , t = t }
+
+rotate : Float -> Float -> Angle -> NTouch -> Point -> Length -> Angle
+rotate dw dh angleOffset0 t (sx, sy) len =
+  let touchAngle = atan2 (t.y - sy) (t.x - sx)
+      angle' = angleOffset0 + touchAngle
+      (ex', ey') = ( sx + len * cos angle'
+                   , sy + len * sin angle' )
+      (ex'', ey'') = boundPoint ((-dw/2, dw/2), (-dh/2, dh/2)) (ex', ey')
+
+  in atan2 (ey'' - sy) (ex'' - sx)
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to draw a line or an arc
@@ -43,51 +69,110 @@ onStartOrEnd ds p onStart onEnd onNeither =
         | eDist <= sDist && eDist < 200 -> onEnd end
         | otherwise                     -> onNeither ()
 
+data CloserTo = Start | End
+findObject : DrawState -> Point -> Maybe (Int, Context Object, CloserTo)
+findObject {problem} p =
+  let toStart (idx, obj) = (idx, obj.pos, Start)
+      toEnd (idx, obj) = ( idx
+                         , ( fst obj.pos + (lengthOf obj)*(cos obj.angle)
+                           , snd obj.pos + (lengthOf obj)*(sin obj.angle) )
+                         , End )
+
+      indexedObjs = Dict.toList problem
+      indexedPoints = (map toStart indexedObjs) ++ (map toEnd indexedObjs)
+  in case indexedPoints of
+       []   -> Nothing
+       _::_ -> let (ok, _, ct) = head . sortBy (dist p . (\(_,pos,_) -> pos)) <| indexedPoints
+               in Just <| (ok, Dict.getOrFail ok problem, ct)
+
 gesture : [NTouch] -> DrawState -> Gesture
 gesture ts ds = -- Debug.log "gesture state" <|
   case (ds.gesture, ts) of
     (NoTouches, t::[]) ->
-      onStartOrEnd ds (t.x, t.y)
-        (\_ ->
-           case ds.mode of
-             Ruler -> Translate { toolP0 = ds.tool.pos
-                                , touchP0 = (t.x, t.y)
-                                , t = t }
-             _     -> NoTouches)
+      case ds.mode of
+        Object ->
+          case findObject ds (t.x, t.y) of
+            Nothing -> NoTouches
+            Just (ok, obj, Start) ->
+              TranslateObj { ok = ok
+                           , oP0 = obj.pos
+                           , touchP0 = (t.x, t.y)
+                           , t = t }
 
-        (\_ ->
-           case ds.mode of
-             Ruler -> TouchEnd { t = t }
-             Draw  -> PencilEnd { t = t }
-             _     -> NoTouches)
+            Just (ok, obj, End) ->
+              TouchEndObj { ok = ok
+                          , t = t }
 
-        (\_ -> NoTouches)
+        _ ->
+          onStartOrEnd ds (t.x, t.y)
+            (\_ ->
+               case ds.mode of
+                 Ruler  -> TranslateTool { toolP0 = ds.tool.pos
+                                         , touchP0 = (t.x, t.y)
+                                         , t = t }
+                 _      -> NoTouches)
 
-    (Translate trans, t'::[]) ->
+            (\_ ->
+               case ds.mode of
+                 Ruler  -> TouchEndTool { t = t }
+                 Draw   -> PencilEnd { t = t }
+                 _      -> NoTouches)
+
+            (\_ -> NoTouches)
+
+    -- TOOL MODE
+    ------------
+    (TranslateTool trans, t'::[]) ->
       if t'.id == trans.t.id
-        then Translate { trans | t <- t' }
+        then TranslateTool { trans | t <- t' }
         else NoTouches
 
     -- rotate/adj length stuff
-    (TouchEnd ep, t'::[]) ->
+    (TouchEndTool ep, t'::[]) ->
       -- dispatch only if the distance t2 has moved is big enough
       if t'.id == ep.t.id
         then if norm (displacement t') > 5
-               then initEndGesture t' ds
-               else TouchEnd { ep | t <- t' }
+               then initToolEndGesture t' ds
+               else TouchEndTool { ep | t <- t' }
         else NoTouches
 
-    (AdjustLength adj, t'::[]) ->
+    (ScaleTool adj, t'::[]) ->
       if t'.id == adj.t.id
-        then AdjustLength { adj | t <- t' }
+        then ScaleTool { adj | t <- t' }
         else NoTouches
 
-    (Rotate rot, t'::[]) ->
+    (RotateTool rot, t'::[]) ->
       if t'.id == rot.t.id
-        then Rotate { rot | t <- t' }
+        then RotateTool { rot | t <- t' }
         else NoTouches
 
-    -- pencil stuff
+    -- OBJECT MODE
+    --------------
+    (TranslateObj trans, t'::[]) ->
+      if t'.id == trans.t.id
+        then TranslateObj { trans | t <- t' }
+        else NoTouches
+
+    (TouchEndObj ep, t'::[]) ->
+      -- dispatch only if the distance t2 has moved is big enough
+      if t'.id == ep.t.id
+        then if norm (displacement t') > 5
+               then initObjEndGesture t' ep.ok ds
+               else TouchEndObj { ep | t <- t' }
+        else NoTouches
+
+    (ScaleObj adj, t'::[]) ->
+      if t'.id == adj.t.id
+        then ScaleObj { adj | t <- t' }
+        else NoTouches
+
+    (RotateObj rot, t'::[]) ->
+      if t'.id == rot.t.id
+        then RotateObj { rot | t <- t' }
+        else NoTouches
+
+    -- PENCIL MODE
+    --------------
     (PencilEnd de, t'::[]) ->
       if t'.id == de.t.id
         then if norm (displacement t') > 5
