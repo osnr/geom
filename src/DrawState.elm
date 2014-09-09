@@ -117,7 +117,7 @@ touchesUpdate ts ds =
          let scal (Just obj) =
                let len' = l0 + (t.x - t.x0) * cos obj.angle +
                                (t.y - t.y0) * sin obj.angle
-                        |> bound (0, ds.displayWidth)
+                        |> bound (1, ds.displayWidth)
                in Just { obj | child <- Problem.setObjLength obj.child len' }
          in { ds' | problem <- Dict.update ok scal ds'.problem }
 
@@ -128,6 +128,9 @@ touchesUpdate ts ds =
                                obj.pos (Problem.lengthOf obj)
              obj' = { obj | angle <- angle' }
          in { ds' | problem <- Dict.insert ok obj' ds'.problem }
+
+       FlipObj { ok } ->
+         { ds' | problem <- Dict.update ok (\(Just obj) -> Just <| Problem.flip obj) ds'.problem }
 
        -- DRAW MODE
        ------------
