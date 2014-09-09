@@ -1,11 +1,6 @@
 module Problem where
 
-import Types (Length, Angle, unitWidth)
-
-type Context a = { pos : (Float, Float) -- FIXME not Point?
-                 , angle : Angle
-
-                 , child : a }
+import Types (Context, Length, Angle, unitWidth)
 
 data Shape = Point
 

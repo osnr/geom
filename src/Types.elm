@@ -1,14 +1,19 @@
 module Types where
 
+type Context a = { pos : Point
+                 , angle : Angle
+
+                 , child : a }
+
 type NTouch = { x:Float, y:Float, id:Int, x0:Float, y0:Float, t0:Time }
+
+type Tool = { length : Length }
 
 type DrawState = { lines : [Line]
                  , arcs : [Arc]
                  , points : [Point]
 
-                 , toolStart : Point
-                 , toolAngle : Angle
-                 , toolLength : Length
+                 , tool : Context Tool
 
                  , displayWidth : Float
                  , displayHeight : Float

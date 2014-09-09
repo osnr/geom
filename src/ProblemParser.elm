@@ -6,6 +6,7 @@ import List
 import String
 import Char
 
+import Types (Context)
 import Problem (..)
 
 import Parser (..)

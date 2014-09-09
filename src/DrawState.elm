@@ -11,16 +11,19 @@ initialDrawState = { lines = []
                    , arcs = []
                    , points = []
 
-                   , toolStart = (0, 0)
-                   , toolAngle = 0
-                   , toolLength = 300
+                   , tool = {
+                       pos = (0, 0)
+                     , angle = 0
+                     , child = { length = 300 }
+                     }
 
                    , displayWidth = 800
                    , displayHeight = 600
                    , mode = Ruler -- kind of annoying that this is duplicated
 
                    , gesture = NoTouches
-                   , drawing = NotDrawing }
+                   , drawing = NotDrawing
+                   }
 
 update : Action -> DrawState -> DrawState
 update a ds = case a of
@@ -59,9 +62,9 @@ erase ds p =
 tapUpdate : Point -> DrawState -> DrawState
 tapUpdate p ds =
     case ds.mode of
-      Draw ->
+      Draw -> -- draw point on tap
           G.onStartOrEnd ds p
-            (\_   -> { ds | points <- ds.toolStart :: ds.points })
+            (\_   -> { ds | points <- ds.tool.pos :: ds.points })
             (\end -> { ds | points <- end :: ds.points })
             (\_   -> ds)
       Erase -> erase ds p
@@ -75,35 +78,39 @@ touchesUpdate ts ds =
        Translate { toolP0, touchP0, t } -> -- TODO optimize so we don't do all this bounding always
          let toolStart' = boundPoint ((-ds.displayWidth/2, ds.displayWidth/2), (-ds.displayHeight/2, ds.displayHeight/2))
                           <| toolP0 `addv` ((t.x, t.y) `subv` touchP0)
-         in { ds' | toolStart <- toolStart' }
+             tool = ds'.tool
+         in { ds' | tool <- { tool | pos <- toolStart' } }
 
        AdjustLength { l0, t } ->
-         let toolLength' = l0 + (t.x - t.x0) * cos ds'.toolAngle +
-                                (t.y - t.y0) * sin ds'.toolAngle
-         in { ds' | toolLength <- bound (0, ds.displayWidth) toolLength' }
+         let toolLength' = l0 + (t.x - t.x0) * cos ds'.tool.angle +
+                                (t.y - t.y0) * sin ds'.tool.angle
+             tool = ds'.tool
+             child = ds'.tool.child
+         in { ds' | tool <- { tool | child <- { child | length <- bound (0, ds.displayWidth) toolLength' } } }
 
        Rotate { angleOffset0, t } ->
-         let (sx, sy) = ds'.toolStart
+         let (sx, sy) = ds'.tool.pos
              touchAngle = atan2 (t.y - sy) (t.x - sx)
              toolAngle' = angleOffset0 + touchAngle
-             (ex', ey') = ( sx + ds.toolLength * cos toolAngle'
-                          , sy + ds.toolLength * sin toolAngle' )
+             (ex', ey') = ( sx + ds.tool.child.length * cos toolAngle'
+                          , sy + ds.tool.child.length * sin toolAngle' )
              (ex'', ey'') = boundPoint ((-ds.displayWidth/2, ds.displayWidth/2),
                                         (-ds.displayHeight/2, ds.displayHeight/2))
                                        (ex', ey')
              toolAngle'' = atan2 (ey'' - sy) (ex'' - sx)
-         in { ds' | toolAngle <- toolAngle'' }
+             tool = ds'.tool
+         in { ds' | tool <- { tool | angle <- toolAngle'' } }
 
        DrawLine { t, p1 } ->
-         let theta = angularDist t - ds.toolAngle
+         let theta = angularDist t - ds.tool.angle
              r = (norm (displacement t)) * cos theta
-             lineLength = bound (0, ds.toolLength) r
+             lineLength = bound (0, ds.tool.child.length) r
          in { ds' | drawing <- DrawingLine (p1,
-                                            (fst p1 + lineLength*(cos ds.toolAngle),
-                                             snd p1 + lineLength*(sin ds.toolAngle))) }
+                                            (fst p1 + lineLength*(cos ds.tool.angle),
+                                             snd p1 + lineLength*(sin ds.tool.angle))) }
 
        DrawArc { t, c, r } ->
-         let (sx, sy) = ds'.toolStart
+         let (sx, sy) = ds'.tool.pos
              arcAngle' = atan2 (t.y - sy) (t.x - sx)
          in { ds' | drawing <-
                case ds'.drawing of
@@ -125,8 +132,8 @@ touchesUpdate ts ds =
                    in DrawingArc counter1 (min minAngle arcAngle'') (max maxAngle arcAngle'')
                         (c, r, minAngle, maxAngle)
 
-                 _ -> DrawingArc Nothing (min ds'.toolAngle arcAngle') (max ds'.toolAngle arcAngle')
-                        (c, r, ds'.toolAngle, arcAngle') }
+                 _ -> DrawingArc Nothing (min ds'.tool.angle arcAngle') (max ds'.tool.angle arcAngle')
+                        (c, r, ds'.tool.angle, arcAngle') }
 
        otherwise ->
          case ds'.drawing of
@@ -138,7 +145,7 @@ touchesUpdate ts ds =
 
 display : DrawState -> Element
 display { displayWidth, displayHeight,
-          lines, arcs, points, toolStart, toolAngle, toolLength, drawing } =
+          lines, arcs, points, tool, drawing } =
         let linesForms = map (traced defaultLine . uncurry segment)
                          <| case drawing of
                               NotDrawing -> lines
@@ -151,7 +158,7 @@ display { displayWidth, displayHeight,
                             DrawingArc _ _ _ a -> a :: arcs
             pointForms = map (\p -> move p <| filled black <| circle 5) points
         in collage (ceiling displayWidth) (ceiling displayHeight)
-           <| pointForms ++ linesForms ++ arcForms ++ [TL.displayTool toolStart toolAngle toolLength]
+           <| pointForms ++ linesForms ++ arcForms ++ [TL.displayTool tool.pos tool.angle tool.child.length]
 
 drawStateS : Signal Action -> Signal DrawState
 drawStateS actions = foldp update initialDrawState actions

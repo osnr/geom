@@ -5,8 +5,8 @@ import Types (..)
 
 insideRuler : DrawState -> NTouch -> Bool
 insideRuler ds {x, y} =
-  let start = ds.toolStart
-      end = toolEnd start ds.toolAngle ds.toolLength
+  let start = ds.tool.pos
+      end = toolEnd ds.tool
 
       distToRuler = distToSegment (x, y) start end
   in distToRuler < 50
@@ -21,25 +21,25 @@ isTouchParallel toolAngle t =
 
 initEndGesture : NTouch -> DrawState -> Gesture
 initEndGesture t ds =
-  if isTouchParallel ds.toolAngle t
-    then AdjustLength { l0 = ds.toolLength, t = t } -- pulling left or right
-    else let (sx, sy) = ds.toolStart
-         in Rotate { angleOffset0 = ds.toolAngle - atan2 (t.y - sy) (t.x - sx), t = t }
+  if isTouchParallel ds.tool.angle t
+    then AdjustLength { l0 = ds.tool.child.length, t = t } -- pulling left or right
+    else let (sx, sy) = ds.tool.pos
+         in Rotate { angleOffset0 = ds.tool.angle - atan2 (t.y - sy) (t.x - sx), t = t }
 
 -- t1 is the fixed finger (the one that went down first)
 -- t2 is the finger that's moving to draw a line or an arc
 initPencilEndGesture : NTouch -> DrawState -> Gesture
 initPencilEndGesture t ds =
-  if isTouchParallel ds.toolAngle t
-    then DrawLine { t = t, p1 = ds.toolStart }
-    else DrawArc { t = t, c = ds.toolStart, r = ds.toolLength }
+  if isTouchParallel ds.tool.angle t
+    then DrawLine { t = t, p1 = ds.tool.pos }
+    else DrawArc { t = t, c = ds.tool.pos, r = ds.tool.child.length }
 
 onStartOrEnd : DrawState -> Point -> (Point -> a) -> (Point -> a) -> (() -> a) -> a
 onStartOrEnd ds p onStart onEnd onNeither =
-  let sDist = dist p ds.toolStart
-      end   = toolEnd ds.toolStart ds.toolAngle ds.toolLength
+  let sDist = dist p ds.tool.pos
+      end   = toolEnd ds.tool
       eDist = dist p end
-  in if | sDist < eDist && sDist < 200  -> onStart ds.toolStart
+  in if | sDist < eDist && sDist < 200  -> onStart ds.tool.pos
         | eDist <= sDist && eDist < 200 -> onEnd end
         | otherwise                     -> onNeither ()
 
@@ -50,7 +50,7 @@ gesture ts ds = -- Debug.log "gesture state" <|
       onStartOrEnd ds (t.x, t.y)
         (\_ ->
            case ds.mode of
-             Ruler -> Translate { toolP0 = ds.toolStart
+             Ruler -> Translate { toolP0 = ds.tool.pos
                                 , touchP0 = (t.x, t.y)
                                 , t = t }
              _     -> NoTouches)

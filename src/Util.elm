@@ -21,8 +21,8 @@ bound (lower, upper) val = max lower <| min upper val
 boundPoint : ((Float, Float), (Float, Float)) -> Point -> Point
 boundPoint ((minX, maxX), (minY, maxY)) (x, y) = (bound (minX, maxX) x, bound (minY, maxY) y)
 
-toolEnd : Point -> Angle -> Length -> Point
-toolEnd (sx, sy) a l = (sx + l*(cos a), sy + l*(sin a))
+toolEnd : Context Tool -> Point
+toolEnd { pos, angle, child } = (fst pos + child.length*(cos angle), snd pos + child.length*(sin angle))
 
 toToolAngle : Point -> Point -> Angle
 toToolAngle (sx, sy) (ex, ey) = snd <| toPolar (ex - sx, ey - sx)
