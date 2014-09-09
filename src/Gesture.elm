@@ -72,17 +72,22 @@ onStartOrEnd ds p onStart onEnd onNeither =
 data CloserTo = Start | End
 findObject : DrawState -> Point -> Maybe (Int, Context Object, CloserTo)
 findObject {problem} p =
-  let toStart (idx, obj) = (idx, obj.pos, Start)
+  let toStart (idx, obj) = (idx, dist p obj.pos)
       toEnd (idx, obj) = ( idx
-                         , ( fst obj.pos + (lengthOf obj)*(cos obj.angle)
-                           , snd obj.pos + (lengthOf obj)*(sin obj.angle) )
-                         , End )
+                         , dist p ( fst obj.pos + (lengthOf obj)*(cos obj.angle)
+                                  , snd obj.pos + (lengthOf obj)*(sin obj.angle) ) )
 
       indexedObjs = Dict.toList problem
-      indexedPoints = (map toStart indexedObjs) ++ (map toEnd indexedObjs)
-  in case indexedPoints of
+      indexedStarts = map toStart indexedObjs
+      indexedEnds = map toEnd indexedObjs
+  in case indexedObjs of
        []   -> Nothing
-       _::_ -> let (ok, _, ct) = head . sortBy (dist p . (\(_,pos,_) -> pos)) <| indexedPoints
+       _::_ -> let (startK, startDist) = head . sortBy snd <| indexedStarts
+                   (endK, endDist) = head . sortBy snd <| indexedEnds
+
+                   (ok, ct) = if startDist >= endDist
+                                 then (endK, End)
+                                 else (startK, Start) -- end should take precedence
                in Just <| (ok, Dict.getOrFail ok problem, ct)
 
 gesture : [NTouch] -> DrawState -> Gesture

@@ -76,6 +76,6 @@ setObjLength child l =
   case child of
     Line params -> Line { params | length <- l }
     Circle params -> Circle { params | r <- l }
-    Triangle params -> Triangle { params | b <- l }
-    Parallelogram params -> Parallelogram { params | b <- l }
-    Quadrilateral params -> Quadrilateral { params | b <- l }
+    Triangle params -> Triangle { params | b <- l, s <- (l/params.b)*params.s }
+    Parallelogram params -> Parallelogram { params | b <- l, s <- (l/params.b)*params.s }
+    Quadrilateral params -> Quadrilateral { params | b <- l, s1 <- (l/params.b)*params.s1, s2 <- (l/params.b)*params.s2 }

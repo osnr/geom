@@ -114,10 +114,11 @@ touchesUpdate ts ds =
          in { ds' | problem <- Dict.update ok tran ds'.problem }
 
        ScaleObj { ok, l0, t } ->
-         let len' = l0 + (t.x - t.x0) * cos ds'.tool.angle +
-                         (t.y - t.y0) * sin ds'.tool.angle
-                  |> bound (0, ds.displayWidth)
-             scal (Just obj) = Just { obj | child <- Problem.setObjLength obj.child len' }
+         let scal (Just obj) =
+               let len' = l0 + (t.x - t.x0) * cos obj.angle +
+                               (t.y - t.y0) * sin obj.angle
+                        |> bound (0, ds.displayWidth)
+               in Just { obj | child <- Problem.setObjLength obj.child len' }
          in { ds' | problem <- Dict.update ok scal ds'.problem }
 
        RotateObj { ok, angleOffset0, t } ->
