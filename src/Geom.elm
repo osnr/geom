@@ -19,6 +19,8 @@ port initialDimensions : Signal (Int, Int)
 withInitialDimensions : Signal (Int, Int)
 withInitialDimensions = merge Window.dimensions initialDimensions
 
+-- action pattern so we can use one foldp to store the state of the whole world
+-- every change that happens to DrawState comes from here
 actions : Signal Action
 actions = merges [ lift (ChangeProblem . toProblemDict) <| keepIf isRight (Right []) problemS
                  , lift ChangeMode Mode.mode
@@ -26,7 +28,7 @@ actions = merges [ lift (ChangeProblem . toProblemDict) <| keepIf isRight (Right
                  , lift Tap Touches.tapsR
                  , lift Touches Touches.touchesR ]
 
-port problemText : Signal String
+port problemText : Signal String -- get the problem text from the outside world
 
 problemS : Signal (Either String Problem)
 problemS = ProblemParser.parseProblem <~ problemText
@@ -45,14 +47,19 @@ problemErrorDisplayS =
 displayS : Signal Element
 displayS = DS.display <~ DS.drawStateS actions
 
+-- overlay all of the pieces of the GUI
 main = (\(dw, dh) tv problemErrorDisp disp modeBtns ->
-            layers [ spacer dw dh |> color gray
-                   , tv
+            layers [ spacer dw dh |> color gray -- gray background of screen
+                   , tv -- green circles where you're touching
 
-                   , problemErrorDisp
-                   , disp
+                   , problemErrorDisp -- parse and semantic errors loading problem
 
-                   , container dw dh topRight modeBtns ])
+                   , disp -- the important one
+                          -- displaying everything that depends on DrawState object
+                          -- (problem shapes, drawings, ruler)
+
+                   , container dw dh topRight modeBtns -- mode buttons
+                   ])
        <~ withInitialDimensions
         ~ Touches.touchesView
         ~ problemErrorDisplayS

@@ -21,6 +21,10 @@ initialDrawState = { problem = Dict.empty
                        pos = (0, 0)
                      , angle = 0
                      , child = { length = 300 }
+
+                     -- these are useless parameters for Tool right now
+                     , manipulable = True
+                     , scalable = True
                      }
 
                    , displayWidth = 800

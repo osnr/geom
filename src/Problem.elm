@@ -6,30 +6,40 @@ import Types (..)
 display : Bool -> ProblemDict -> Form
 display objMode = group . map (displayCShape objMode) . Dict.values
 
+styleCShape : Bool -> Bool -> Shape -> Form
+styleCShape manipulable scalable =
+  case (manipulable, scalable) of
+    (False, False) -> outlined (solid brown)
+    (True, False) -> filled (rgba 255 255 0 0.5)
+    (True, True) -> filled (rgba 0 255 255 0.5)
+
+    -- this really shouldn't happen
+    (False, True) -> outlined (solid brown)
+
 displayCShape : Bool -> Context Object -> Form
-displayCShape objMode { pos, angle, child } =
-  group ([displayShape child] ++ if objMode then [displayStartEnd child] else [])
+displayCShape objMode { pos, angle, child, manipulable, scalable } =
+  group ([displayShape child |> styleCShape manipulable scalable] ++
+         if (objMode && manipulable) then [displayStartEnd child] else [])
   |> rotate angle
   |> move (fst pos, snd pos)
 
-displayShape : Object -> Form
+displayShape : Object -> Shape
 displayShape obj =
   case obj of
     Point ->
-        circle 2 |> filled black
+        circle 2
 
     Line { length } ->
-        segment (0, 0) (length, 0) |> traced defaultLine
+        segment (0, 0) (length, 0)
 
     Circle { r } ->
-        circle r |> outlined defaultLine
+        circle r
 
     Triangle { b, s, theta } ->
         path [ (0, 0)
              , (b, 0)
              , (b - s*cos theta, s*sin theta)
              , (0, 0) ]
-         |> outlined defaultLine
 
     Parallelogram { b, s, theta } ->
         path [ (0, 0)
@@ -37,7 +47,6 @@ displayShape obj =
              , (b - s*cos theta, s*sin theta)
              , (-s*cos theta, s*sin theta)
              , (0, 0) ]
-         |> outlined defaultLine
 
     Quadrilateral { b, s1, s2, theta, phi } ->
         path [ (0, 0)
@@ -45,7 +54,6 @@ displayShape obj =
              , (b - s1*cos theta, s1*sin theta)
              , (-s2*cos phi, s2*sin phi)
              , (0, 0) ]
-          |> outlined defaultLine
 
 displayStartEnd : Object -> Form
 displayStartEnd obj =

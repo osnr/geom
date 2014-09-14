@@ -67,11 +67,20 @@ toShape shp =
       let ps = Dict.fromList params
           lookupCoords' = lookupCoords ps (show shp)
           lookupFloat' = lookupFloat ps (show shp)
+          lookupBool' = lookupBool ps (show shp)
 
       in lookupCoords' "pos" >>= \(x, y) ->
          withDefault 0 (lookupFloat' "angle") >>= \angle ->
+         withDefault False (lookupBool' "manipulable") >>= \manipulable ->
+         withDefault False (lookupBool' "scalable") >>= \scalable ->
+
          Right { pos = (x * unitWidth, y * unitWidth)
-               , angle = degrees angle } >>= \ctx ->
+               , angle = degrees angle
+
+               , manipulable = manipulable
+               , scalable = scalable
+
+               } >>= \ctx ->
 
          either Left (Right . child ctx) <|
          case typ of
@@ -126,6 +135,13 @@ lookupFloat d dbg i =
     Just (AstNumber val) -> Right val
     Just _               -> Left <| String.join "" ["Need number for parameter '", i, "' in shape '", dbg, "'."]
     Nothing              -> Left <| String.join "" ["Missing parameter '", i, "' in shape '", dbg, "'."]
+
+lookupBool : Dict.Dict AstIdentifier AstValue -> DebugString -> AstIdentifier -> Either String Bool
+lookupBool d dbg i =
+  case Dict.get i d of
+    Just (AstBoolean val) -> Right val
+    Just _                -> Left <| String.join "" ["Need 'true' or 'false' for parameter '", i, "' in shape '", dbg, "'."]
+    Nothing               -> Left <| String.join "" ["Missing parameter '", i, "' in shape '", dbg, "'."]
 
 withDefault : a -> Either String a -> Either String a
 withDefault def mx = case mx of

@@ -5,6 +5,9 @@ import Dict
 type Context a = { pos : Point
                  , angle : Angle
 
+                 , manipulable : Bool
+                 , scalable : Bool
+
                  , child : a }
 
 data Object = Point
