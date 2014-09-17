@@ -136,6 +136,8 @@ gesture ts ds = -- Debug.log "gesture state" <|
                  Ruler  -> TranslateTool { toolP0 = ds.tool.pos
                                          , touchP0 = (t.x, t.y)
                                          , t = t }
+                 Draw   -> DrawLine { t = t
+                                    , p1 = ds.tool.pos }
                  _      -> NoTouches)
 
             (\_ ->

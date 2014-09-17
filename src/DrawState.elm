@@ -44,8 +44,11 @@ update a ds = case a of
                 Resize (dw, dh) -> { ds | displayWidth <- toFloat dw
                                         , displayHeight <- toFloat dh }
 
+-- the user has tapped somewhere to erase
 erase : DrawState -> Point -> DrawState
 erase ds p =
+    -- construct a list of the distance of each drawing on the screen from the touch point,
+    -- paired with an eraser-continuation which will delete the thing from DrawState
     let iLines = zip [0..length ds.lines] ds.lines
         lineErasers = map (\(i, (p1, p2)) ->
                                ( (\ds -> { ds | lines <- removeIndex i iLines })
@@ -66,9 +69,10 @@ erase ds p =
                                 , dist p' p ))
                        iPoints
 
+        erasers : [((DrawState -> DrawState), Float)]
         erasers = pointErasers ++ arcErasers ++ lineErasers
-    in case sortBy snd erasers of
-         (eraser, _) :: _ -> eraser ds
+    in case sortBy snd erasers of -- sort the drawings by how close they are
+         (eraser, _) :: _ -> eraser ds -- run the eraser continuation paired with the closest drawing
          []               -> ds
 
 tapUpdate : Point -> DrawState -> DrawState
@@ -150,20 +154,27 @@ touchesUpdate ts ds =
          let (sx, sy) = ds'.tool.pos
              arcAngle' = atan2 (t.y - sy) (t.x - sx)
          in { ds' | drawing <-
+               -- this might be the most complicated logic in the app, and we could simplify it I bet
+
+               -- basically, we need to remember 1) where the user's been drawing a split-second ago
+               -- we know *an* angle of the user's finger relative to the ruler origin,
+               -- but it might be the wrong angle -- it might be -30 deg instead of 330 deg
+               -- and 2) the upper and lower bound angles the user's hit when drawing
+               -- so they can swish above and below the end and make an arc that way
                case ds'.drawing of
                  DrawingArc counter minAngle maxAngle (_, _, _, arcAngle) ->
                    let counter1 =
-                       case counter of
-                         Nothing -> if abs (arcAngle - arcAngle') > pi
-                                    then Just arcAngle
+                       case counter of -- are we retaining an old, opposite angle?
+                         Nothing -> if abs (arcAngle - arcAngle') > pi -- has there been a huge change in angle?
+                                    then Just arcAngle -- remember the old angle
                                     else Nothing
-                         Just oldAngle ->
+                         Just oldAngle -> -- yes, flip the new angle so it's the same direction as the old
                              let gap = oldAngle - arcAngle'
                              in if | gap > pi  -> Just (2*pi + arcAngle')
                                    | gap < -pi -> Just (arcAngle' - 2*pi)
                                    | otherwise -> Nothing
 
-                       arcAngle'' = case counter1 of
+                       arcAngle'' = case counter1 of -- if we're remembering the old angle, use that
                                       Nothing       -> arcAngle'
                                       Just oldAngle -> oldAngle
                    in DrawingArc counter1 (min minAngle arcAngle'') (max maxAngle arcAngle'')
