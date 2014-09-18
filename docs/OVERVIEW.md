@@ -65,9 +65,39 @@ The DrawState object inside the app gets updated whenever the user does anything
 There are a couple actions the user could do that would affect DrawState: they could edit the problem text, forcing a problem reload (`ChangeProblem`), they could change where they're touching on the screen (`Touches`, *this is the most important*), they could pick a new mode (`ChangeMode`), they could tap somewhere (`Tap`), they could resize the browser viewport (`Resize`).
 
 ## Problems
-Problems are fed from the JavaScript in edit.html or index.html (which takes them from a textarea editor or from the Parse server), through the `problemText` port into the app, which runs a parser (src/ProblemParser.elm) and eventually converts the problem text into a dictionary mapping integer indices to Context Object data.
+You can write, load, and save problems in edit.html's right pane. The left pane will automatically reparse and reevaluate the problem as you type.
+
+Syntax is space-separated shape statements:
+
+```
+NameOfShape1 { pos = (3, 2), [optional: angle = {angle in degrees},
+                                        manipulable = true | false,
+                                        scalable = true | false],
+               shapespecificparam1 = 10, shapespecificparam2 = 7... }
+
+NameOfShape2 { pos = (10, -1), [optional: angle = {angle in degrees},
+                                          manipulable = true | false,
+                                          scalable = true | false],
+               shapespecificparam1 = 10, shapespecificparam2 = 7... }
+```
+
+Here's one set of example shapes:
+
+```
+Point { pos = (0, 0), manipulable = true }
+
+Triangle { pos = (5, 3), angle = 5, b = 6, s = 10, theta = 50, manipulable = true, scalable = true }
+
+Parallelogram { pos = (5, -3), angle = 5, b = 6, s = 10, theta = 50 }
+
+Circle { pos = (-3, -3), r = 2 }
+```
+
+Problems are fed from the JavaScript in edit.html or index.html (which takes them from the right pane or from the Parse server), through the `problemText` port into the app, which runs a parser (src/ProblemParser.elm) and eventually converts the problem text into a dictionary mapping integer indices to Context Object data.
 
 So you have in the dictionary (which becomes the `problem` field of DrawState) a representation of [(0, a triangle at (0, 0) rotated 30 degrees with base length 3, side length 4, angle 30 degrees), (1, a circle at (10, 10) with radius 20), ...]. 
+
+Problems which are manipulable are solid yellow. Problems which are scalable and manipulable are solid light blue. Problems which can't be manipulated at all have brown outlines.
 
 ## Gestures
 OK, so we get a `Touches` action. How do we turn a list of the user's fingers on the screen into meaningful gestures?
