@@ -148,12 +148,13 @@ gesture ts ds = -- Debug.log "gesture state" <|
 
             (\_ -> NoTouches)
 
-    (NoTouches, t1::t2::[]) ->
+    (_, t1::t2::[]) ->
       case ds.mode of
         Object ->
           case findObject ds (t1.x, t1.y) of
             Nothing         -> NoTouches
             Just (ok, _, _) -> FlipObj { ok = ok }
+
         _      -> NoTouches
 
     -- TOOL MODE
