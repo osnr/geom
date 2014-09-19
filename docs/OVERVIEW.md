@@ -1,7 +1,7 @@
 # Overview
-This project ('Geom') is a Euclidean geometry workspace app, built under contract for Stanford professor Jay McClelland in summer 2014.
+This project ('Geom') is a Euclidean geometry workspace app, built under contract for Stanford professor Jay McClelland in summer 2014. The app design was developed in conjunction with McClelland and Steven Hansen, a cognitive science graduate student at Stanford, based on inspiration from the work of Cornell Mathematics Professor David Henderson (Henderson & Taimina, 2005) and the Deepmind Atari game simulator (Mnih et al, 2013)
 
-The goal of the project is to construct an environment in which a software agent can solve the geometry problems found on the New York State Regents test. The agent will be presented with a problem ("copy this triangle" plus a picture of the triangle), and it should have a virtual pencil, compass, and ruler in Geom to perform the task.
+The goal of the project is to construct an environment in which a software agent can solve the geometry problems found on the New York State Regents test. Initial goals are a little less ambitious: For now, the agent will be given concrete tasks.  For example, the agent will be presented with a problem ("copy this triangle" plus a picture of the triangle), and it should have a virtual pencil, compass, and ruler in Geom to perform the task.
 
 (A major difference between the Geom environment and [Ancient Greek Geometry](http://sciencevsmagic.net/geo/) or [Euclid: the Game](http://www.euclidthegame.com/) is that the user can use specific distances. A side can have a length of 5 units marked. That's why we have a *ruler* and not just a straightedge.)
 
@@ -164,3 +164,9 @@ These are some things which would be nice to have but aren't strictly necessary.
 - Point labeling and text support for problems (right now you can only provide shapes)
 - Move the problem hosting to a dedicated Stanford server with our own server software (we're using Parse to host problems currently)
 - Drawing rays
+- Undo the last action
+
+# Bibliography
+Henderson, D. W., & Taimiņa, D. (2005). Experiencing geometry: Euclidean and non-Euclidean with history. Prentice Hall.
+
+Mnih, V., Kavukcuoglu, K., Silver, D., Graves, A., Antonoglou, I., Wierstra, D., & Riedmiller, M. (2013). Playing Atari with deep reinforcement learning. arXiv preprint arXiv:1312.5602.
