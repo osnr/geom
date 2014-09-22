@@ -148,12 +148,15 @@ gesture ts ds = -- Debug.log "gesture state" <|
 
             (\_ -> NoTouches)
 
+    (FlipObj _, t1::t2::[]) -> -- if we just flipped obj, remember that, but don't flip again
+      FlipObj Nothing
+
     (_, t1::t2::[]) ->
       case ds.mode of
         Object ->
           case findObject ds (t1.x, t1.y) of
             Nothing         -> NoTouches
-            Just (ok, _, _) -> FlipObj { ok = ok }
+            Just (ok, _, _) -> FlipObj <| Just ok
 
         _      -> NoTouches
 

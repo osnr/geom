@@ -77,7 +77,7 @@ data Gesture = NoTouches
              | TouchEndObj { ok:ObjectKey, t:NTouch }
              | ScaleObj { ok:ObjectKey, l0:Length, t:NTouch }
              | RotateObj { ok:ObjectKey, angleOffset0:Angle, t:NTouch }
-             | FlipObj { ok:ObjectKey }
+             | FlipObj (Maybe ObjectKey)
 
              | PencilEnd { t:NTouch } -- before we've figured out which one
              | DrawLine { t:NTouch, p1:Point }

@@ -64,7 +64,7 @@ The DrawState object inside the app gets updated whenever the user does anything
 
 There are a couple actions the user could do that would affect DrawState: they could edit the problem text, forcing a problem reload (`ChangeProblem`), they could change where they're touching on the screen (`Touches`, *this is the most important*), they could pick a new mode (`ChangeMode`), they could tap somewhere (`Tap`), they could resize the browser viewport (`Resize`).
 
-## Problems
+## Specifying objects
 You can write, load, and save problems in edit.html's right pane. The left pane will automatically reparse and reevaluate the problem as you type.
 
 Syntax is space-separated shape statements:

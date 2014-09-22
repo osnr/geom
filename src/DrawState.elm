@@ -137,7 +137,7 @@ touchesUpdate ts ds =
              obj' = { obj | angle <- angle' }
          in { ds' | problem <- Dict.insert ok obj' ds'.problem }
 
-       FlipObj { ok } ->
+       FlipObj (Just ok) -> -- if Nothing, flip already happened and user just moved 2 fingers again
          { ds' | problem <- Dict.update ok (\(Just obj) -> Just <| Problem.flip obj) ds'.problem }
 
        -- DRAW MODE
